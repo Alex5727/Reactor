@@ -9,6 +9,7 @@ public class Weapon : MonoBehaviour
     public Camera playerCamera;          // la cámara del jugador
     public Transform muzzle;             // GameObject en la boquilla del arma
     public GameObject bulletPrefab;
+    public GameObject destello;
 
     [Header("Disparo")]
     public float fireRate = 8f;          // balas por segundo
@@ -16,6 +17,7 @@ public class Weapon : MonoBehaviour
     public float bulletSpeed = 80f;
     public float maxAimDistance = 200f;  // a qué distancia apunta si no hay nada enfrente
     public LayerMask aimMask = ~0;       // qué capas puede "ver" la mira (quita la capa del Player)
+
 
 
     private float nextFireTime;
@@ -130,6 +132,17 @@ public class Weapon : MonoBehaviour
             targetPoint = hit.point;
         else
             targetPoint = ray.origin + ray.direction * maxAimDistance;
+
+
+
+        //Destello
+        GameObject flashClone = Instantiate(
+            destello,
+            muzzle.position,
+             muzzle.rotation * Quaternion.Euler(0f, 90f, 0f),
+            muzzle
+        );
+        Destroy (flashClone, 1f);
 
         // 2) La bala sale de la boquilla pero va hacia el punto que apunta la mira
         Vector3 direction = (targetPoint - muzzle.position).normalized;
