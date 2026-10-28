@@ -303,7 +303,7 @@ public class FlyingEnemy : MonoBehaviour
 
     public void CrearExplosion(Vector3 posicion)
     {
-        Debug.Log("Se destruyo uno");
+       
         GameObject explosion = Instantiate(
             prefabExplosion,
             posicion,

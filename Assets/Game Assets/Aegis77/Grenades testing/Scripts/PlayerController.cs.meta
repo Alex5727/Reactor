@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 586ef42c455b75643ab14bc9c09ef28b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 352898
+  packageName: Full Basic Grenade System + Explosion & Sound effects
+  packageVersion: 1.1
+  assetPath: Assets/Game Assets/Aegis77/Grenades testing/Scripts/PlayerController.cs
+  uploadId: 937770

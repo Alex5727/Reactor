@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: af3dfe436be6add4ab03946f546f95c8
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 352898
+  packageName: Full Basic Grenade System + Explosion & Sound effects
+  packageVersion: 1.1
+  assetPath: Assets/Game Assets/Aegis77/Grenades testing/Scripts/GrenadePickup.cs
+  uploadId: 937770
