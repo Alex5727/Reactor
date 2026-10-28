@@ -125,7 +125,7 @@ MonoBehaviour:
   firePoint: {fileID: 4030837861943093332}
   bulletPrefab: {fileID: 4605877936588043210, guid: de5da14a512da044ba6bf9874b210bda, type: 3}
   maxHealth: 50
-  detectionRange: 60
+  detectionRange: 30.2
   preferredDistance: 14
   distanceTolerance: 3
   strafeSpeed: 7
