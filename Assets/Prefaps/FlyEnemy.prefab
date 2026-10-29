@@ -152,6 +152,8 @@ MonoBehaviour:
   maxShootAngle: 20
   aimOffset: {x: 0, y: 0, z: 0}
   prefabExplosion: {fileID: 8706527765486217166, guid: d90bf1547b44e6147afa93e62c5f642b, type: 3}
+  healingOrbPrefab: {fileID: 5704628344295055497, guid: 092fc548314e830448293769cd888169, type: 3}
+  dropChance: 0.721
 --- !u!65 &5192943050027171566
 BoxCollider:
   m_ObjectHideFlags: 0

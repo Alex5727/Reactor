@@ -12,7 +12,7 @@ public class Controller : MonoBehaviour
 
     public void CargarEscena(string NombreScena)
     {
-        SceneManager.LoadScene("Nivel1");
+        SceneManager.LoadScene(NombreScena);
     }
 
     // Update is called once per frame

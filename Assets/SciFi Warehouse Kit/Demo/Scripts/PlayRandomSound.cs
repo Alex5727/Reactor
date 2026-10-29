@@ -17,13 +17,11 @@
  
      void StartAudio()
      {
-         Invoke ("RandomSoundness", clipDelay);
+         
      }
  
      void RandomSoundness()
      {
-         randomSound.clip = audioSources[Random.Range(0, audioSources.Length)];
-         randomSound.Play ();
-         StartAudio ();
+         
      }
  }

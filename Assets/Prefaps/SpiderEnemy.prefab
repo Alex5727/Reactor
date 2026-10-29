@@ -264,8 +264,11 @@ MonoBehaviour:
   target: {fileID: 6562018769888714849, guid: 3fe3b0724846dab4ead4737a7276af4f, type: 3}
   eyePoint: {fileID: 0}
   explosionPrefab: {fileID: 5481530993414605263, guid: 7a12b40fb78f3694ea3ba5830db032b4, type: 3}
+  deathSpiExplision: {fileID: 8706527765486217166, guid: d1942dc084357664eb75ad37590721a2, type: 3}
+  healingOrbPrefab: {fileID: 5704628344295055497, guid: 092fc548314e830448293769cd888169, type: 3}
   maxHealth: 30
-  sightRange: 15.4
+  dropChance: 0.73
+  sightRange: 19
   fieldOfView: 162
   wakeUpDelay: 0.4
   moveSpeed: 11.23
@@ -274,7 +277,6 @@ MonoBehaviour:
   gravity: -25
   maxWalkSlope: 50
   groundSnapDistance: 0.3
-  stepHeight: 1
   probeDistance: 2
   avoidCommitTime: 0.8
   climbSpeed: 4.5

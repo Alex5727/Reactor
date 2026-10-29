@@ -131,7 +131,9 @@ public class PlayerMovement : MonoBehaviour
         //Interfaz
         MotrarVida.text = health + "/" + MaxHealt;
         BarraDeVida.fillAmount = health / MaxHealt;
+
     }
+
 
     void Jump()
     {
@@ -152,5 +154,16 @@ public class PlayerMovement : MonoBehaviour
     public void Die()
     {
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    public void Heal(int amount)
+    {
+        health = Mathf.Min(
+            health + amount,
+            MaxHealt
+        );
+
+        MotrarVida.text = health + "/" + MaxHealt;
+        BarraDeVida.fillAmount = health / MaxHealt;
     }
 }

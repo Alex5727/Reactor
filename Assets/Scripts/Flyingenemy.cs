@@ -46,6 +46,14 @@ public class FlyingEnemy : MonoBehaviour
 
     public GameObject prefabExplosion;
 
+
+    [Header("Drop de curación")]
+    public GameObject healingOrbPrefab;
+
+    [Range(0f, 1f)]
+    public float dropChance = 0.75f;
+
+
     private float health;
     private Vector3 velocity;
     private float strafeDir = 1f;
@@ -274,7 +282,12 @@ public class FlyingEnemy : MonoBehaviour
     public void TakeDamage(float amount)
     {
         health -= amount;
-        if (health <= 0f) Die();
+        if (health <= 0f) {
+            DropHealingOrb();
+            Die();
+        }
+
+
     }
 
     void Die()
@@ -299,6 +312,24 @@ public class FlyingEnemy : MonoBehaviour
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(target.position, preferredDistance);
         }
+    }
+
+    void DropHealingOrb()
+    {
+        if (healingOrbPrefab == null)
+            return;
+
+        if (Random.value > dropChance)
+            return;
+
+        Vector3 spawnPosition =
+            transform.position + Vector3.up * 0.5f;
+
+        Instantiate(
+            healingOrbPrefab,
+            spawnPosition,
+            Quaternion.identity
+        );
     }
 
     public void CrearExplosion(Vector3 posicion)
