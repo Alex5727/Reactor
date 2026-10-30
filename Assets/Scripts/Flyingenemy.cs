@@ -6,6 +6,9 @@ public class FlyingEnemy : MonoBehaviour
     public Transform target;                 // si está vacío, busca el objeto con tag "Player"
     public Transform firePoint;              // empty de donde salen las balas
     public GameObject bulletPrefab;
+    public AudioClip sonidoShootEnemy;
+    public AudioClip sonidoMuerte;
+    public AudioSource audioSource;
 
     [Header("Vida")]
     public float maxHealth = 50f;
@@ -257,6 +260,7 @@ public class FlyingEnemy : MonoBehaviour
         // Solo dispara si ya está mirando hacia el jugador
         if (Vector3.Angle(transform.forward, dir) > maxShootAngle) return;
 
+
         // Solo dispara si no hay una pared en medio
         if (Physics.Linecast(firePoint.position, target.position + aimOffset, out RaycastHit hit,
                              obstacleMask, QueryTriggerInteraction.Ignore))
@@ -269,11 +273,31 @@ public class FlyingEnemy : MonoBehaviour
                                              Random.Range(-aimInaccuracy, aimInaccuracy), 0f);
         Quaternion rot = Quaternion.LookRotation(dir) * spread;
 
-        GameObject bullet = Instantiate(bulletPrefab, firePoint.position, rot);
-        if (bullet.TryGetComponent(out Bullet b)) b.speed = bulletSpeed;
+
+        GameObject bullet = Instantiate(
+            bulletPrefab,
+            firePoint.position,
+            rot
+        );
+
+        if (bullet.TryGetComponent(out Bullet b))
+        {
+            b.speed = bulletSpeed;
+        }
+
+        // Reproducir sonido únicamente cuando se dispara
+        if (audioSource != null && sonidoShootEnemy != null)
+        {
+            audioSource.PlayOneShot(sonidoShootEnemy);
+        }
 
         float interval = 1f / fireRate;
-        nextFireTime = Time.time + interval * Random.Range(1f - fireRateRandomness, 1f + fireRateRandomness);
+
+        nextFireTime = Time.time + interval * Random.Range(
+            1f - fireRateRandomness,
+            1f + fireRateRandomness
+        );
+
     }
 
     // ---------------------------------------------------------------- Vida
@@ -283,6 +307,13 @@ public class FlyingEnemy : MonoBehaviour
     {
         health -= amount;
         if (health <= 0f) {
+
+                        AudioSource.PlayClipAtPoint(
+                    sonidoMuerte,
+                    transform.position,
+                    1
+                );
+
             DropHealingOrb();
             Die();
         }

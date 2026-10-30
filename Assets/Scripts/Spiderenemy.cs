@@ -10,8 +10,12 @@ public class SpiderEnemy : MonoBehaviour
     public GameObject explosionPrefab;       // opcional: efecto al explotar
     public GameObject deathSpiExplision;       // opcional: efecto al explotar al morir
     public GameObject healingOrbPrefab;
+    public AudioClip sonidoExplosion;
+    public AudioClip sonidoMuerte;
+    public AudioSource audioSource;
+    public AudioClip sonidoDeteccion;
+    public float volumenExplosion = 1f;
 
-  
 
     Animator anim;
 
@@ -139,6 +143,9 @@ public class SpiderEnemy : MonoBehaviour
         if (state != State.Idle) return;
         state = State.Chasing;
         chaseStartTime = Time.time + wakeUpDelay;
+
+        audioSource.PlayOneShot(sonidoDeteccion);
+
     }
 
     bool CanSeeTarget()
@@ -584,6 +591,12 @@ public class SpiderEnemy : MonoBehaviour
         if (exploded) return;
         exploded = true;
 
+        AudioSource.PlayClipAtPoint(
+          sonidoExplosion,
+          transform.position,
+          volumenExplosion
+      );
+
         if (explosionPrefab != null)
         {
             GameObject explosion = Instantiate(
@@ -630,8 +643,14 @@ public class SpiderEnemy : MonoBehaviour
             DropHealingOrb();
             Destroy(gameObject);    // muere sin explotar
 
+                    AudioSource.PlayClipAtPoint(
+                sonidoMuerte,
+                transform.position,
+                volumenExplosion
+            );
 
-                   GameObject explosion = Instantiate(
+
+            GameObject explosion = Instantiate(
                 deathSpiExplision,
                 transform.position,
                 Quaternion.identity

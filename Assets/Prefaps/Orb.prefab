@@ -51,6 +51,7 @@ MonoBehaviour:
   floatAmplitude: 0.15
   floatSpeed: 2
   rotationSpeed: 90
+  SonidoHealing: {fileID: 8300000, guid: c48a972d3d024c2408a3331750786a29, type: 3}
 --- !u!135 &1696056798447429400
 SphereCollider:
   m_ObjectHideFlags: 0
