@@ -270,7 +270,7 @@ MonoBehaviour:
   sonidoExplosion: {fileID: 8300000, guid: fc96116dc3c141440aabb5605744fea2, type: 3}
   sonidoMuerte: {fileID: 8300000, guid: f01c623f724825e44a923d1ae50256f2, type: 3}
   audioSource: {fileID: -6803285074183668556}
-  sonidoDeteccion: {fileID: 8300000, guid: 78419f98379502c4dbfb2774bc94e7c1, type: 3}
+  sonidoDeteccion: {fileID: 8300000, guid: f84a2bf3a6b43994a970dab1c4bc6fe8, type: 3}
   volumenExplosion: 1.5
   maxHealth: 30
   dropChance: 0.73
