@@ -5,6 +5,7 @@ TagManager:
   serializedVersion: 3
   tags:
   - Healing
+  - Enemy
   layers:
   - Default
   - TransparentFX

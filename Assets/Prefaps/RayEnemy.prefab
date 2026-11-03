@@ -219,7 +219,7 @@ MonoBehaviour:
     m_Bits: 1527
   warningMaterial: {fileID: 2100000, guid: 319fc3a3f8ac73e45ab4493290898430, type: 2}
   beamMaterial: {fileID: 2100000, guid: ac5cb75d7bb6c5346a5e890be572922a, type: 2}
-  warningColor: {r: 1, g: 0.15, b: 0.1, a: 1}
+  warningColor: {r: 1, g: 0.15, b: 0.1, a: 0.9137255}
   beamColor: {r: 1, g: 0.25, b: 0.05, a: 1}
   coreColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!65 &2664656515319471638

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class SpiderEnemy : MonoBehaviour
+public class SpiderEnemy : MonoBehaviour, IDamageable
 {
     public enum State { Idle, Chasing, Climbing }
 

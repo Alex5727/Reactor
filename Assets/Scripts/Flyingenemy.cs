@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class FlyingEnemy : MonoBehaviour
+public class FlyingEnemy : MonoBehaviour, IDamageable
 {
     [Header("Referencias")]
     public Transform target;                 // si está vacío, busca el objeto con tag "Player"

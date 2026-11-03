@@ -37987,7 +37987,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3747903237374144056, guid: f640b09d513b0024683a250c062134b9, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -40.07
+      value: -38.83
       objectReference: {fileID: 0}
     - target: {fileID: 3747903237374144056, guid: f640b09d513b0024683a250c062134b9, type: 3}
       propertyPath: m_LocalRotation.w
@@ -54373,6 +54373,14 @@ PrefabInstance:
       propertyPath: barraRecarga
       value: 
       objectReference: {fileID: 386522716}
+    - target: {fileID: 9007033950058281355, guid: 3fe3b0724846dab4ead4737a7276af4f, type: 3}
+      propertyPath: impactPrefab
+      value: 
+      objectReference: {fileID: 101133646639165350, guid: 33c85e508b8b9c44995a56797ac07b35, type: 3}
+    - target: {fileID: 9007033950058281355, guid: 3fe3b0724846dab4ead4737a7276af4f, type: 3}
+      propertyPath: tracerPrefab
+      value: 
+      objectReference: {fileID: 6115107755449726476, guid: ae8b822e62b2f7849ae7052d56f1e495, type: 3}
     - target: {fileID: 9007033950058281355, guid: 3fe3b0724846dab4ead4737a7276af4f, type: 3}
       propertyPath: barraRecarga2
       value: 
