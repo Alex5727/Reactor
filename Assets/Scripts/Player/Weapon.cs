@@ -15,7 +15,6 @@ public class Weapon : MonoBehaviour
     public AudioClip RechardSound;
     public AudioSource audioSource;
 
-
     [Header("Disparo")]
     public float fireRate = 8f;          // balas por segundo
     public bool automatic = true;        // true = mantener click, false = un disparo por click
@@ -80,8 +79,9 @@ public class Weapon : MonoBehaviour
             IsRecarging = false;
         }
 
+            if (Mouse.current == null) return;
 
-        if (Mouse.current == null) return;
+        if (SpecialRoomManager.ShootingLocked) return;
 
         bool wantsToShoot = automatic
             ? Mouse.current.leftButton.isPressed
@@ -93,16 +93,10 @@ public class Weapon : MonoBehaviour
             Shoot();
         }
 
-        textoContadorBalas.text = "Balas: " + ContBullets;
-
         if (Keyboard.current != null &&
            Keyboard.current.rKey.wasPressedThisFrame && ContBullets != AmountBullets && IsRecarging == false)
         {
-            ContBullets = 0;
-            IsRecarging = true;
-            TimerRechard = TimeRechard;
-            //sonido recarga
-            audioSource.PlayOneShot(RechardSound);
+            Rechair();
         }
 
 
@@ -162,6 +156,9 @@ public class Weapon : MonoBehaviour
 
         ContBullets = ContBullets - 1;
 
+        BulltsUI();
+
+
         if (ContBullets <= 0)
         {
             TimerRechard = TimeRechard;
@@ -169,10 +166,27 @@ public class Weapon : MonoBehaviour
         }
     }
 
+
+    public void Rechair()
+    {
+        ContBullets = 0;
+        IsRecarging = true;
+        TimerRechard = TimeRechard;
+        //sonido recarga
+        audioSource.PlayOneShot(RechardSound);
+
+        Invoke(nameof(BulltsUI), 1.2f);
+    }
+
+
     private void Recoil()
     {
         recoilPosition += Vector3.back * recoildForce;
     }
 
+    private void BulltsUI()
+    {
+        textoContadorBalas.text = "Balas: " + ContBullets;
+    }
 
 }

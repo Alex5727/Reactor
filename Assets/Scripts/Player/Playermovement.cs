@@ -42,13 +42,25 @@ public class PlayerMovement : MonoBehaviour
     private float jumpBufferTimer;
     private int airJumpsLeft;
     private float dashCooldownTimer;
-    private float health;
+
+    [Tooltip("Scripts que se apagan al morir y se vuelven a encender al reaparecer (PlayerMovement, MouseLook, Weapon...)")]
+    public Behaviour[] disableOnDeath;
+
+    public float health { get; private set; }
+    public bool IsDead { get; private set; }
+
+
 
     void Awake()
     {
         controller = GetComponent<CharacterController>();
         airJumpsLeft = maxAirJumps;
         health = MaxHealt;
+    }
+
+    void Start()
+    {
+        ActualizarUI();
     }
 
     void Update()
@@ -129,8 +141,8 @@ public class PlayerMovement : MonoBehaviour
 
 
         //Interfaz
-        MotrarVida.text = health + "/" + MaxHealt;
-        BarraDeVida.fillAmount = health / MaxHealt;
+      //  MotrarVida.text = health + "/" + MaxHealt;
+       // BarraDeVida.fillAmount = health / MaxHealt;
 
     }
 
@@ -144,19 +156,41 @@ public class PlayerMovement : MonoBehaviour
     // Las balas llaman a este método automáticamente
     public void TakeDamage(float amount)
     {
-        health -= amount;
-        if (health <= 0)
-        {
-            Die();
-        }
+        if (IsDead) return;
+
+        health = Mathf.Max(0f, health - amount);
+
+        if (health <= 0f) Die();
+
+        ActualizarUI();
     }
 
-    public void Die()
+    void Die()
     {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        IsDead = true;
+
+        foreach (Behaviour b in disableOnDeath)
+            if (b != null) b.enabled = false;
+
+        if (CheckpointManager.Instance != null)
+            CheckpointManager.Instance.OnPlayerDied();
+        else
+            Debug.LogWarning("PlayerHealth: no hay un CheckpointManager en la escena.", this);
     }
 
-    public void Heal(int amount)
+    // Lo llama el CheckpointManager al reaparecer: vida completa y controles de vuelta
+    public void Revive()
+    {
+        IsDead = false;
+        health = MaxHealt;
+
+        foreach (Behaviour b in disableOnDeath)
+            if (b != null) b.enabled = true;
+
+        ActualizarUI();
+    }
+
+public void Heal(int amount)
     {
         health = Mathf.Min(
             health + amount,
@@ -166,4 +200,13 @@ public class PlayerMovement : MonoBehaviour
         MotrarVida.text = health + "/" + MaxHealt;
         BarraDeVida.fillAmount = health / MaxHealt;
     }
+
+
+
+    void ActualizarUI()
+    {
+        if (BarraDeVida != null) BarraDeVida.fillAmount = health / MaxHealt;
+        if (MotrarVida != null) MotrarVida.text = Mathf.CeilToInt(health) + " / " + Mathf.CeilToInt(MaxHealt);
+    }
+
 }

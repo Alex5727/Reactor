@@ -204,6 +204,7 @@ GameObject:
   - component: {fileID: 3415480838248487747}
   - component: {fileID: 7751947178549880939}
   - component: {fileID: -6803285074183668556}
+  - component: {fileID: 1224627435187397410}
   m_Layer: 9
   m_Name: SpiderEnemy
   m_TagString: Untagged
@@ -272,13 +273,13 @@ MonoBehaviour:
   audioSource: {fileID: -6803285074183668556}
   sonidoDeteccion: {fileID: 8300000, guid: f84a2bf3a6b43994a970dab1c4bc6fe8, type: 3}
   volumenExplosion: 1.5
-  maxHealth: 30
+  maxHealth: 50
   dropChance: 0.73
   sightRange: 19
   fieldOfView: 162
   wakeUpDelay: 0.4
   moveSpeed: 11.23
-  acceleration: 14.9
+  acceleration: 11.7
   turnSpeed: 10
   gravity: -25
   maxWalkSlope: 50
@@ -423,6 +424,18 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &1224627435187397410
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2444387643288563167}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5ce3cc8bbd4e774d863c7e1ebd3aed7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &2803368270213785280
 GameObject:
   m_ObjectHideFlags: 0

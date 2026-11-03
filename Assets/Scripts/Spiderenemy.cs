@@ -146,6 +146,7 @@ public class SpiderEnemy : MonoBehaviour
 
         audioSource.PlayOneShot(sonidoDeteccion);
 
+
     }
 
     bool CanSeeTarget()
