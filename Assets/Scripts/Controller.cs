@@ -12,6 +12,7 @@ public class Controller : MonoBehaviour
 
     public void CargarEscena(string NombreScena)
     {
+        Time.timeScale = 1f;
         SceneManager.LoadScene(NombreScena);
     }
 

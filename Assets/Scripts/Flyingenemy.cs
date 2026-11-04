@@ -60,6 +60,9 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
     private float health;
     private Vector3 velocity;
     private float strafeDir = 1f;
+
+    private bool detectedByDamage = false;
+
     private float strafeTimer;
     private float nextFireTime;
     private float bobOffset;
@@ -118,18 +121,27 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
         lastTargetPos = target.position;
 
         Vector3 toTarget = target.position - transform.position;
+
         bool inRange = toTarget.sqrMagnitude <= detectionRange * detectionRange;
+
+        // Detecta al jugador si está dentro del rango
+        // o si anteriormente recibió daño del jugador.
+        bool detected = inRange || detectedByDamage;
 
         Vector3 desiredVelocity = Vector3.zero;
 
-        if (inRange)
+        if (detected)
         {
             desiredVelocity = ComputeDesiredVelocity(toTarget, dt);
             AimAndShoot();
         }
         else
         {
-            desiredVelocity = new Vector3(0f, VerticalVelocity(target.position.y + hoverHeight), 0f);
+            desiredVelocity = new Vector3(
+                0f,
+                VerticalVelocity(target.position.y + hoverHeight),
+                0f
+            );
         }
 
         // Suavizado: cambia de velocidad gradualmente, sin tirones
@@ -305,20 +317,22 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
     // Las balas del jugador llaman a este método automáticamente
     public void TakeDamage(float amount)
     {
-        health -= amount;
-        if (health <= 0f) {
+        // Detectar al jugador inmediatamente al recibir daño
+        detectedByDamage = true;
 
-                        AudioSource.PlayClipAtPoint(
-                    sonidoMuerte,
-                    transform.position,
-                    1
-                );
+        health -= amount;
+
+        if (health <= 0f)
+        {
+            AudioSource.PlayClipAtPoint(
+                sonidoMuerte,
+                transform.position,
+                1
+            );
 
             DropHealingOrb();
             Die();
         }
-
-
     }
 
     void Die()

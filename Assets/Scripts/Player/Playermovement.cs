@@ -201,6 +201,17 @@ public void Heal(int amount)
         BarraDeVida.fillAmount = health / MaxHealt;
     }
 
+    public void SetHealth(float amount)
+    {
+        if (IsDead) return;
+
+        health = Mathf.Clamp(amount, 0f, MaxHealt);
+
+        if (health <= 0f)
+            Die();
+
+        ActualizarUI();
+    }
 
 
     void ActualizarUI()
