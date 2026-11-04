@@ -47,7 +47,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5c7e39d390304614b8dd5d160d83edc5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  healAmount: 50
+  healAmount: 30
   floatAmplitude: 0.15
   floatSpeed: 2
   rotationSpeed: 90
