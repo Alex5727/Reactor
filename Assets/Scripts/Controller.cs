@@ -48,6 +48,9 @@ public class Controller : MonoBehaviour
         panelOscuro.color = color;
 
         Time.timeScale = 1f;
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
         SceneManager.LoadScene(NombreScena);
     }
 
