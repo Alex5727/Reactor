@@ -130,18 +130,16 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
 
         Vector3 desiredVelocity = Vector3.zero;
 
-        if (detected)
+        if (inRange)
         {
             desiredVelocity = ComputeDesiredVelocity(toTarget, dt);
             AimAndShoot();
         }
         else
         {
-            desiredVelocity = new Vector3(
-                0f,
-                VerticalVelocity(target.position.y + hoverHeight),
-                0f
-            );
+            // Fuera de rango: se queda quieto y no hace ningún cálculo de física
+            velocity = Vector3.zero;
+            return;
         }
 
         // Suavizado: cambia de velocidad gradualmente, sin tirones

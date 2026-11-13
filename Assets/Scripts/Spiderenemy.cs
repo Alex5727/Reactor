@@ -35,6 +35,7 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
     public float turnSpeed = 10f;
     public float gravity = -25f;
     public float maxWalkSlope = 50f;         // pendientes más empinadas se tratan como pared
+    public float stepHeight = 0.4f;          // escalones de esta altura o menos los sube caminando (máx. 80% del radio)
     public float groundSnapDistance = 0.3f;
 
     [Header("Rodear paredes")]
@@ -82,6 +83,7 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
 
     private Vector3 stuckRefPos;
     private float stuckTimer;
+    private float idleCheckTimer;
 
     private Collider ownCollider;
     private Collider targetCollider;
@@ -134,7 +136,13 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
 
     void UpdateIdle(float dt)
     {
-        ApplyGravity(dt);
+        // Solo calcula gravedad hasta que aterriza (después no hace falta cada frame)
+        if (!grounded) ApplyGravity(dt);
+
+        idleCheckTimer -= dt;
+        if (idleCheckTimer > 0f) return;
+        idleCheckTimer = 0.2f + Random.value * 0.05f; 
+
         if (CanSeeTarget()) Wake();
     }
 
@@ -275,6 +283,10 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
 
     bool TryStartClimb(Vector3 flatDir)
     {
+        // Condiciones baratas primero: si no puede trepar, ni siquiera lanza el rayo
+        if (Time.time < nextClimbTime) return false;
+        if (TargetFeetY() - (transform.position.y - radius) < climbMinHeightDifference) return false;
+
         if (!ProbeObstacle(flatDir, climbEngageDistance, out RaycastHit wallHit)) return false;
         if (!WantsToClimb(wallHit, flatDir)) return false;
 
@@ -492,6 +504,15 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
     }
 
     // =============================================================== Detección (helpers)
+
+    float StepLimit => Mathf.Min(stepHeight, radius * 0.8f);
+
+    // Altura de los pies del jugador
+    float TargetFeetY()
+    {
+        return targetCollider != null ? targetCollider.bounds.min.y : target.position.y;
+    }
+
 
     // Ignora sus propios colliders y al jugador (el jugador es la meta, no un obstáculo)
     bool IsIgnored(Collider c)

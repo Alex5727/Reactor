@@ -8,6 +8,7 @@ public class BeamEnemy : MonoBehaviour
     public Transform target;                 // si está vacío, busca el objeto con tag "Player"
     public Transform firePoint;              // empty de donde sale el rayo (si está vacío usa el centro)
 
+
     public GameObject prefabExplosion;
     public AudioClip sonidoMuerte;
     public AudioSource audioSource;
@@ -18,11 +19,11 @@ public class BeamEnemy : MonoBehaviour
 
     public GameObject healingOrbPrefab;
 
-    [Range(0f, 1f)]
-    public float dropChance = 0.75f;
+
 
     [Header("Vida")]
     public float maxHealth = 80f;
+    public float dropChance;
 
     [Header("Detección y distancia")]
     public float detectionRange = 60f;       // rango de visión (necesita línea de vista, no ve a través de paredes)
@@ -93,6 +94,7 @@ public class BeamEnemy : MonoBehaviour
     private float stateTimer;
     private float lostSightTimer;
     private float tickTimer;
+    private float nextIdleCheck;
 
     private LineRenderer warningLine;
     private LineRenderer beamLine;
@@ -167,6 +169,10 @@ public class BeamEnemy : MonoBehaviour
         Vector3 targetPoint = target.position + aimOffset;
         if ((targetPoint - transform.position).sqrMagnitude > detectionRange * detectionRange) return;
 
+        // Comprueba la línea de vista 5 veces por segundo en vez de en cada frame
+        if (Time.time < nextIdleCheck) return;
+        nextIdleCheck = Time.time + 0.2f + Random.value * 0.05f;
+
         if (HasLineOfSight(FireOrigin(), targetPoint)) Wake();
     }
 
@@ -191,13 +197,13 @@ public class BeamEnemy : MonoBehaviour
         stateTimer = chargeTime;
         lostSightTimer = 0f;
 
-
         //SONIDO CARGA
         AudioSource.PlayClipAtPoint(
                     sonidoCarga,
                     transform.position,
                     VolumenSon
                 );
+
     }
 
     // Rayo de advertencia (inofensivo): sigue al jugador despacio
@@ -229,10 +235,10 @@ public class BeamEnemy : MonoBehaviour
             tickTimer = 0f;
 
             AudioSource.PlayClipAtPoint(
-           sonidoDisparo,
-           transform.position,
-           VolumenSon
-       );
+       sonidoDisparo,
+       transform.position,
+       VolumenSon
+         );
         }
     }
 
@@ -287,7 +293,6 @@ public class BeamEnemy : MonoBehaviour
 
     void DrawWarning(Vector3 origin, float progress)
     {
-
         CastBeam(origin, aimDir, 0f, out Vector3 end, out bool warningHitsPlayer);
 
         float width = warningWidth * (1f + progress * 1.5f);
@@ -322,8 +327,6 @@ public class BeamEnemy : MonoBehaviour
     // hitsPlayer = true si el jugador está en la trayectoria antes de una pared.
     void CastBeam(Vector3 origin, Vector3 dir, float hitRadius, out Vector3 end, out bool hitsPlayer)
     {
-        
-
         end = origin + dir * maxBeamLength;
         hitsPlayer = false;
 
@@ -607,6 +610,7 @@ public class BeamEnemy : MonoBehaviour
 
         Destroy(explosion, 2f);
     }
+
 
     // =============================================================== Debug
 
