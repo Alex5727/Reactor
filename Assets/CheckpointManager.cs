@@ -81,6 +81,7 @@ public class CheckpointManager : MonoBehaviour
 
         // Asegura lo que pasó hasta ahora: enemigos muertos y habitaciones superadas
         int enemies = TrackedEnemy.CommitDeaths();
+        ScoreManager.GuardarEnCheckpoint();      // asegura la puntuacion
         int rooms = 0;
         foreach (SpecialRoom room in SpecialRoom.All)
             if (room.CommitCompletion()) rooms++;
@@ -102,6 +103,8 @@ public class CheckpointManager : MonoBehaviour
         if (respawning) return;
 
         respawning = true;
+
+        ScoreManager.PerderNoGuardados();        // pierde los puntos no asegurados
 
         // Bloquear disparos inmediatamente
 

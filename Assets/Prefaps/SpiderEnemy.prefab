@@ -273,7 +273,7 @@ MonoBehaviour:
   audioSource: {fileID: -6803285074183668556}
   sonidoDeteccion: {fileID: 8300000, guid: f84a2bf3a6b43994a970dab1c4bc6fe8, type: 3}
   volumenExplosion: 1.5
-  maxHealth: 50
+  maxHealth: 40
   dropChance: 0.73
   sightRange: 19
   fieldOfView: 162
@@ -283,6 +283,7 @@ MonoBehaviour:
   turnSpeed: 10
   gravity: -25
   maxWalkSlope: 50
+  stepHeight: 0.4
   groundSnapDistance: 0.3
   probeDistance: 2
   avoidCommitTime: 0.8

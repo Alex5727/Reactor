@@ -68,6 +68,11 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
 
     private State state = State.Idle;
     private float health;
+    private EnemyHealthBar barraVida;        // barra de vida sobre el enemigo
+
+    [Header("Puntuacion")]
+    public int puntos = 100;                  // puntos que da al eliminarlo
+    private bool puntosOtorgados;
     private bool exploded;
 
     private Vector3 horizontalVelocity;
@@ -95,6 +100,7 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
     void Awake()
     {
         health = maxHealth;
+        barraVida = EnemyHealthBar.Crear(transform);
     }
 
     void Start()
@@ -659,6 +665,12 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
     public void TakeDamage(float amount)
     {
         health -= amount;
+        if (barraVida != null) barraVida.Actualizar(health, maxHealth);
+        if (health <= 0f && !puntosOtorgados)
+        {
+            puntosOtorgados = true;
+            ScoreManager.EnemigoEliminado(puntos, transform.position);
+        }
         Wake();                                   // si lo golpean estando quieto, se activa
         if (health <= 0f)
         {

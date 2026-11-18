@@ -58,6 +58,11 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
 
 
     private float health;
+    private EnemyHealthBar barraVida;        // barra de vida sobre el enemigo
+
+    [Header("Puntuacion")]
+    public int puntos = 150;                  // puntos que da al eliminarlo
+    private bool puntosOtorgados;
     private Vector3 velocity;
     private float strafeDir = 1f;
 
@@ -73,6 +78,7 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
     void Awake()
     {
         health = maxHealth;
+        barraVida = EnemyHealthBar.Crear(transform);
         bobOffset = Random.value * 10f;
     }
 
@@ -319,6 +325,12 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
         detectedByDamage = true;
 
         health -= amount;
+        if (barraVida != null) barraVida.Actualizar(health, maxHealth);
+        if (health <= 0f && !puntosOtorgados)
+        {
+            puntosOtorgados = true;
+            ScoreManager.EnemigoEliminado(puntos, transform.position);
+        }
 
         if (health <= 0f)
         {

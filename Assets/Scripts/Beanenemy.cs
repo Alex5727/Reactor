@@ -84,6 +84,11 @@ public class BeamEnemy : MonoBehaviour
 
     private State state = State.Idle;
     private float health;
+    private EnemyHealthBar barraVida;        // barra de vida sobre el enemigo
+
+    [Header("Puntuacion")]
+    public int puntos = 300;                  // puntos que da al eliminarlo
+    private bool puntosOtorgados;
 
     private Vector3 velocity;
     private float strafeDir = 1f;
@@ -107,6 +112,7 @@ public class BeamEnemy : MonoBehaviour
     void Awake()
     {
         health = maxHealth;
+        barraVida = EnemyHealthBar.Crear(transform);
         bobOffset = Random.value * 10f;
         aimDir = transform.forward;
 
@@ -563,6 +569,12 @@ public class BeamEnemy : MonoBehaviour
     public void TakeDamage(float amount)
     {
         health -= amount;
+        if (barraVida != null) barraVida.Actualizar(health, maxHealth);
+        if (health <= 0f && !puntosOtorgados)
+        {
+            puntosOtorgados = true;
+            ScoreManager.EnemigoEliminado(puntos, transform.position);
+        }
         Wake();                                   // si lo golpean estando quieto, se activa
         if (health <= 0f) Die();
     }
