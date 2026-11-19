@@ -1834,7 +1834,7 @@ GameObject:
   - component: {fileID: 3817461637826189614}
   - component: {fileID: 4297743535707773908}
   m_Layer: 0
-  m_Name: JefeSoldado
+  m_Name: JefeIA
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

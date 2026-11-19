@@ -26,6 +26,8 @@ public static class OptimizarEscena
         int lucesSinSombra = OptimizarLuces(escena);
         int occluders = MarcarOcclusion(escena);
 
+        int malas = QuitarMallasInvalidas(escena);
+
         EditorSceneManager.MarkSceneDirty(escena);
 
         StaticOcclusionCulling.smallestOccluder = 3f;
@@ -35,12 +37,49 @@ public static class OptimizarEscena
 
         EditorSceneManager.MarkSceneDirty(escena);
         Debug.Log("OptimizarEscena '" + escena.name + "': " + lucesSinSombra + " luces pequenas sin sombra, " +
-                  occluders + " piezas marcadas para occlusion culling, horneado " + (horneado ? "correcto" : "FALLO") +
+                  occluders + " piezas marcadas para occlusion culling, " + malas + " objetos con malla no valida excluidos, horneado " + (horneado ? "correcto" : "FALLO") +
                   ". Guarda la escena.");
         EditorUtility.DisplayDialog("Optimizar escena",
             "Listo.\n\nLuces pequenas sin sombra: " + lucesSinSombra + "\nPiezas para occlusion culling: " + occluders +
             "\nOcclusion culling: " + (horneado ? "horneado" : "no se pudo hornear (revisa la consola)") +
             "\n\nGuarda la escena con Ctrl+S.", "OK");
+    }
+
+    // El horneado falla ("Failed getting triangles. Submesh index is out of bounds") con objetos que tienen
+    // mas materiales que submallas, o sin malla. Esos objetos se sacan del occlusion culling
+    // (se siguen viendo igual, solo no participan en el horneado).
+    static int QuitarMallasInvalidas(UnityEngine.SceneManagement.Scene escena)
+    {
+        const StaticEditorFlags marcas = StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic;
+        int n = 0;
+        foreach (Renderer r in Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (r.gameObject.scene != escena) continue;
+            GameObject go = r.gameObject;
+            StaticEditorFlags f = GameObjectUtility.GetStaticEditorFlags(go);
+            if ((f & marcas) == 0) continue;
+
+            bool invalida = false;
+            if (r is MeshRenderer)
+            {
+                MeshFilter mf = go.GetComponent<MeshFilter>();
+                Mesh m = mf != null ? mf.sharedMesh : null;
+                invalida = m == null || m.subMeshCount == 0 || r.sharedMaterials.Length > m.subMeshCount;
+            }
+            else if (r is SkinnedMeshRenderer smr)
+            {
+                Mesh m = smr.sharedMesh;
+                invalida = m == null || r.sharedMaterials.Length > m.subMeshCount;
+            }
+            else invalida = true;   // particulas, lineas, etc. no sirven para occlusion
+
+            if (!invalida) continue;
+            Undo.RecordObject(go, "Quitar occlusion");
+            GameObjectUtility.SetStaticEditorFlags(go, f & ~marcas);
+            Debug.Log("OptimizarEscena: '" + go.name + "' se saco del occlusion culling (malla/materiales no validos).", go);
+            n++;
+        }
+        return n;
     }
 
     static int OptimizarLuces(UnityEngine.SceneManagement.Scene escena)
@@ -85,6 +124,13 @@ public static class OptimizarEscena
         {
             GameObject go = r.gameObject;
             if (go.scene != escena) continue;
+
+            // Objetos marcados con SiempreVisible nunca entran al occlusion culling
+            if (go.GetComponentInParent<SiempreVisible>() != null)
+            {
+                SiempreVisibleEditor.QuitarMarcasOcclusion(go);
+                continue;
+            }
 
             GameObject origen = PrefabUtility.GetCorrespondingObjectFromOriginalSource(go);
             string ruta = origen != null ? AssetDatabase.GetAssetPath(origen) : "";

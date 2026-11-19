@@ -52,6 +52,10 @@ public class BossSoldier : MonoBehaviour, IDamageable
     public float danoOrbe = 18f;
     public float multiplicadorAturdido = 1.5f;      // dano extra mientras esta aturdido
 
+    [Header("Hitbox (ajuste a los pies)")]
+    public bool ajustarHitboxAuto = true;           // ajusta el CharacterController al esqueleto al iniciar
+    public float hundirModelo = 0f;                 // metros: positivo baja el modelo, negativo lo sube
+
     [Header("Rayo")]
     public float alturaRayo = 0.9f;                 // altura sobre el suelo (bajo para poder saltarlo)
 
@@ -106,6 +110,45 @@ public class BossSoldier : MonoBehaviour, IDamageable
 
     // ================================================================== Inicio
 
+    // Ajusta la capsula del CharacterController a los pies y la cabeza del modelo para que no flote.
+    void AjustarHitbox()
+    {
+        if (cc == null) return;
+        float escala = Mathf.Max(transform.lossyScale.y, 0.0001f);
+        float suelo = 0f, alto = cc.height;
+        bool okEsqueleto = false;
+
+        if (ajustarHitboxAuto && anim != null && anim.isHuman)
+        {
+            Transform pieI = anim.GetBoneTransform(HumanBodyBones.LeftFoot);
+            Transform pieD = anim.GetBoneTransform(HumanBodyBones.RightFoot);
+            Transform cabeza = anim.GetBoneTransform(HumanBodyBones.Head);
+            if (pieI != null && pieD != null && cabeza != null)
+            {
+                Transform dedoI = anim.GetBoneTransform(HumanBodyBones.LeftToes);
+                Transform dedoD = anim.GetBoneTransform(HumanBodyBones.RightToes);
+                float tobillo = Mathf.Min(YLocal(pieI), YLocal(pieD));
+                float dedos = (dedoI != null && dedoD != null) ? Mathf.Min(YLocal(dedoI), YLocal(dedoD)) : tobillo;
+                float yCabeza = YLocal(cabeza);
+                float altoCuerpo = yCabeza - Mathf.Min(tobillo, dedos);
+                // la suela esta un poco por debajo de los huesos del pie
+                suelo = Mathf.Min(tobillo, dedos) - altoCuerpo * 0.03f;
+                alto = (yCabeza - suelo) * 1.1f;
+                okEsqueleto = alto > 0.1f;
+            }
+        }
+        if (!ajustarHitboxAuto && Mathf.Approximately(hundirModelo, 0f)) return;
+        if (!okEsqueleto) { suelo = cc.center.y - cc.height * 0.5f - cc.skinWidth / escala; alto = cc.height; }
+
+        cc.height = alto;
+        cc.radius = Mathf.Min(cc.radius, alto * 0.45f);
+        // la capsula descansa a "skinWidth" (en metros) sobre el suelo: se compensa para que los pies toquen
+        float y = suelo + alto * 0.5f + cc.skinWidth / escala + hundirModelo / escala;
+        cc.center = new Vector3(0f, y, 0f);
+    }
+
+    float YLocal(Transform t) { return transform.InverseTransformPoint(t.position).y; }
+
     void Awake()
     {
         cc = GetComponent<CharacterController>();
@@ -121,6 +164,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
         if (anim != null && anim.isHuman) manoDerecha = anim.GetBoneTransform(HumanBodyBones.RightHand);
         if (manoDerecha == null) manoDerecha = BuscarHijo(transform, "Hand_Right");
         if (anim != null && anim.isHuman) cadera = anim.GetBoneTransform(HumanBodyBones.Hips);
+        AjustarHitbox();
         renderers = GetComponentsInChildren<Renderer>();
         mpb = new MaterialPropertyBlock();
 
@@ -150,6 +194,12 @@ public class BossSoldier : MonoBehaviour, IDamageable
         ui = BossHealthBarUI.Crear(nombreJefe, fuente, colorBarraVida, vidaFase2, vidaFase3);
         ui.Actualizar(vida, vidaMaxima);
         StartCoroutine(Cerebro());
+    }
+
+    // Refleja en la barra los cambios de nombreJefe hechos desde el Inspector (tambien durante Play)
+    void OnValidate()
+    {
+        if (ui != null) ui.CambiarNombre(nombreJefe);
     }
 
     void OnDestroy()

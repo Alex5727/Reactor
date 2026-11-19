@@ -106,6 +106,8 @@ public class BeamEnemy : MonoBehaviour
     private LineRenderer coreLine;
 
     private readonly RaycastHit[] hitBuffer = new RaycastHit[16];
+    private readonly Collider[] overlapBuffer = new Collider[16];
+    private Vector3 lastSafePosition;
 
     // =============================================================== Ciclo de vida
 
@@ -115,6 +117,7 @@ public class BeamEnemy : MonoBehaviour
         barraVida = EnemyHealthBar.Crear(transform);
         bobOffset = Random.value * 10f;
         aimDir = transform.forward;
+        lastSafePosition = transform.position;
 
         Material fallback = null;
         if (warningMaterial == null || beamMaterial == null) fallback = CreateDefaultMaterial();
@@ -154,6 +157,7 @@ public class BeamEnemy : MonoBehaviour
         Vector3 desiredVelocity = ComputeDesiredVelocity(toTarget, dt, attacking ? attackMoveMultiplier : 1f);
         velocity = Vector3.MoveTowards(velocity, desiredVelocity, acceleration * dt);
         MoveWithCollisions(dt);
+        KeepOutOfWalls();
 
         UpdateAim(dt);
 
@@ -287,6 +291,11 @@ public class BeamEnemy : MonoBehaviour
 
         // Gira hacia el jugador con una velocidad angular limitada
         aimDir = Vector3.RotateTowards(aimDir, desired, turnSpeed * Mathf.Deg2Rad * dt, 0f);
+
+        // RotateTowards va acumulando error: se normaliza cada frame (si no, los SphereCast fallan
+        // con "IsNormalized(direction)") y si quedo invalido se reinicia apuntando al jugador
+        if (!IsFinite(aimDir) || aimDir.sqrMagnitude < 0.0001f) aimDir = desired;
+        aimDir.Normalize();
         transform.rotation = Quaternion.LookRotation(aimDir, Vector3.up);
     }
 
@@ -333,6 +342,9 @@ public class BeamEnemy : MonoBehaviour
     // hitsPlayer = true si el jugador está en la trayectoria antes de una pared.
     void CastBeam(Vector3 origin, Vector3 dir, float hitRadius, out Vector3 end, out bool hitsPlayer)
     {
+        if (!IsFinite(dir) || dir.sqrMagnitude < 0.0001f) dir = transform.forward;
+        dir.Normalize();
+
         end = origin + dir * maxBeamLength;
         hitsPlayer = false;
 
@@ -492,6 +504,40 @@ public class BeamEnemy : MonoBehaviour
                 break;
             }
         }
+    }
+
+    // Evita que el enemigo quede dentro de una pared (un SphereCast que empieza dentro de un
+    // collider no lo detecta y el enemigo la atravesaria, quedando escondido mientras dispara).
+    void KeepOutOfWalls()
+    {
+        bool invalid = !IsFinite(transform.position);
+        // Solo regresa si la ultima posicion segura esta libre (si aparecio pegado a algo, lo deja moverse para salir)
+        bool inside = !invalid && IsInsideObstacle(transform.position) && !IsInsideObstacle(lastSafePosition);
+
+        if (invalid || inside)
+        {
+            transform.position = lastSafePosition;
+            velocity = Vector3.zero;
+            if (inside) { strafeDir = -strafeDir; ResetStrafeTimer(); }
+        }
+        else if (!IsInsideObstacle(transform.position) || IsInsideObstacle(lastSafePosition))
+        {
+            lastSafePosition = transform.position;
+        }
+    }
+
+    bool IsInsideObstacle(Vector3 pos)
+    {
+        int count = Physics.OverlapSphereNonAlloc(pos, radius * 0.8f, overlapBuffer, obstacleMask.value, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (!IsIgnored(overlapBuffer[i])) return true;
+        return false;
+    }
+
+    static bool IsFinite(Vector3 v)
+    {
+        return !(float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                 float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z));
     }
 
     void ResetStrafeTimer()

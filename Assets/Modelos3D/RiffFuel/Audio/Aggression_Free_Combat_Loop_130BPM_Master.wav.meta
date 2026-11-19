@@ -1,0 +1,30 @@
+fileFormatVersion: 2
+guid: 18362e89ce042c349a33e25f206ce989
+AudioImporter:
+  externalObjects: {}
+  serializedVersion: 7
+  defaultSettings:
+    serializedVersion: 2
+    loadType: 0
+    sampleRateSetting: 0
+    sampleRateOverride: 44100
+    compressionFormat: 1
+    quality: 1
+    conversionMode: 0
+    preloadAudioData: 0
+  platformSettingOverrides: {}
+  forceToMono: 0
+  normalize: 1
+  loadInBackground: 0
+  ambisonic: 0
+  3D: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 418150
+  packageName: Aggression - Combat Metal Loop (Free Demo)
+  packageVersion: 1.0
+  assetPath: Assets/RiffFuel/Audio/Aggression_Free_Combat_Loop_130BPM_Master.wav
+  uploadId: 1022482

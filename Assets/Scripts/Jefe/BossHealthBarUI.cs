@@ -109,6 +109,11 @@ public class BossHealthBarUI : MonoBehaviour
         relleno.fillAmount = porcentaje;
     }
 
+    public void CambiarNombre(string nombre)
+    {
+        if (txtNombre != null && txtNombre.text != nombre) txtNombre.text = nombre;
+    }
+
     public void AvisoFase(string texto)
     {
         txtFase.text = texto;
