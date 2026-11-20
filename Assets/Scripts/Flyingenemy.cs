@@ -15,6 +15,7 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
 
     [Header("Distancia al jugador")]
     public float detectionRange = 60f;       // fuera de este rango se queda flotando
+    public float distanciaOlvidar = 100f;    // una vez que te detecta, solo te olvida si te alejas mas que esto
     public float preferredDistance = 14f;    // distancia ideal
     public float distanceTolerance = 3f;     // margen +/- donde no se acerca ni se aleja
 
@@ -67,6 +68,11 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
     private float strafeDir = 1f;
 
     private bool detectedByDamage = false;
+    private bool alerta;                       // ya detecto al jugador: lo sigue aunque lo pierda de vista
+    private bool loVe = true;
+    private float siguienteRevision;
+    private Vector3 puntoRastro;
+    private bool tieneRastro;
 
     private float strafeTimer;
     private float nextFireTime;
@@ -133,13 +139,28 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
         // Detecta al jugador si está dentro del rango
         // o si anteriormente recibió daño del jugador.
         bool detected = inRange || detectedByDamage;
+        if (detected) alerta = true;
+        if (alerta && toTarget.sqrMagnitude > distanciaOlvidar * distanciaOlvidar)
+        {
+            alerta = false;               // se alejo muchisimo (varias salas): lo olvida
+            detectedByDamage = false;
+        }
 
         Vector3 desiredVelocity = Vector3.zero;
 
-        if (inRange)
+        if (alerta)
         {
-            desiredVelocity = ComputeDesiredVelocity(toTarget, dt);
-            AimAndShoot();
+            // Revisa unas 5 veces por segundo si ve al jugador; si no, sigue su rastro
+            if (Time.time >= siguienteRevision)
+            {
+                siguienteRevision = Time.time + 0.2f + Random.value * 0.05f;
+                loVe = RastroJugador.LineaLibre(transform.position, target.position + aimOffset, radius, obstacleMask, transform);
+                tieneRastro = !loVe && RastroJugador.PuntoVisible(transform.position, radius, obstacleMask, transform, out puntoRastro);
+            }
+
+            if (loVe || !tieneRastro) desiredVelocity = ComputeDesiredVelocity(toTarget, dt);
+            else desiredVelocity = VelocidadHaciaRastro(dt);
+            AimAndShoot();                // solo dispara si no hay pared en medio
         }
         else
         {
@@ -156,6 +177,16 @@ public class FlyingEnemy : MonoBehaviour, IDamageable
     }
 
     // ---------------------------------------------------------------- Movimiento
+
+    // Vuela hacia el punto mas reciente del rastro del jugador que tiene a la vista
+    Vector3 VelocidadHaciaRastro(float dt)
+    {
+        Vector3 to = puntoRastro - transform.position;
+        Vector3 flat = new Vector3(to.x, 0f, to.z);
+        Vector3 horizontal = flat.sqrMagnitude > 0.01f ? flat.normalized * (approachSpeed + strafeSpeed) * 0.7f : Vector3.zero;
+        Vector3 vertical = Vector3.up * VerticalVelocity(puntoRastro.y + 0.5f);
+        return horizontal + vertical;
+    }
 
     Vector3 ComputeDesiredVelocity(Vector3 toTarget, float dt)
     {

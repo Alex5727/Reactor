@@ -27,6 +27,7 @@ public class BeamEnemy : MonoBehaviour
 
     [Header("Detección y distancia")]
     public float detectionRange = 60f;       // rango de visión (necesita línea de vista, no ve a través de paredes)
+    public float distanciaOlvidar = 100f;    // una vez que te detecta, solo te olvida si te alejas mas que esto
     public float attackRange = 22f;          // a esta distancia (o menos) empieza a cargar el rayo
     public float preferredDistance = 15f;    // distancia ideal al jugador
     public float distanceTolerance = 3f;     // margen +/- donde no se acerca ni se aleja
@@ -98,6 +99,10 @@ public class BeamEnemy : MonoBehaviour
     private Vector3 aimDir;
     private float stateTimer;
     private float lostSightTimer;
+    private bool loVe = true;
+    private float siguienteRevision;
+    private Vector3 puntoRastro;
+    private bool tieneRastro;
     private float tickTimer;
     private float nextIdleCheck;
 
@@ -153,8 +158,27 @@ public class BeamEnemy : MonoBehaviour
         bool attacking = state == State.Charging || state == State.Firing;
         Vector3 toTarget = target.position - transform.position;
 
+        // Se alejo muchisimo (varias salas): lo olvida y vuelve a quedarse quieto
+        if (toTarget.sqrMagnitude > distanciaOlvidar * distanciaOlvidar)
+        {
+            HideBeams();
+            state = State.Idle;
+            velocity = Vector3.zero;
+            return;
+        }
+
+        // Revisa unas 5 veces por segundo si ve al jugador; si no, sigue su rastro
+        if (Time.time >= siguienteRevision)
+        {
+            siguienteRevision = Time.time + 0.2f + Random.value * 0.05f;
+            loVe = RastroJugador.LineaLibre(transform.position, target.position + aimOffset, radius, obstacleMask, transform);
+            tieneRastro = !loVe && RastroJugador.PuntoVisible(transform.position, radius, obstacleMask, transform, out puntoRastro);
+        }
+
         // Movimiento (igual que el otro volador: lateral + distancia + sin atravesar paredes)
-        Vector3 desiredVelocity = ComputeDesiredVelocity(toTarget, dt, attacking ? attackMoveMultiplier : 1f);
+        Vector3 desiredVelocity = (!loVe && tieneRastro && !attacking)
+            ? VelocidadHaciaRastro()
+            : ComputeDesiredVelocity(toTarget, dt, attacking ? attackMoveMultiplier : 1f);
         velocity = Vector3.MoveTowards(velocity, desiredVelocity, acceleration * dt);
         MoveWithCollisions(dt);
         KeepOutOfWalls();
@@ -419,6 +443,15 @@ public class BeamEnemy : MonoBehaviour
     }
 
     // =============================================================== Movimiento (igual que el otro volador)
+
+    // Vuela hacia el punto mas reciente del rastro del jugador que tiene a la vista
+    Vector3 VelocidadHaciaRastro()
+    {
+        Vector3 to = puntoRastro - transform.position;
+        Vector3 flat = new Vector3(to.x, 0f, to.z);
+        Vector3 horizontal = flat.sqrMagnitude > 0.01f ? flat.normalized * (approachSpeed + strafeSpeed) * 0.7f : Vector3.zero;
+        return horizontal + Vector3.up * VerticalVelocity(puntoRastro.y + 0.5f);
+    }
 
     Vector3 ComputeDesiredVelocity(Vector3 toTarget, float dt, float speedMul)
     {

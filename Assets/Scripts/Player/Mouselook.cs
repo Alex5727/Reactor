@@ -17,8 +17,14 @@ public class MouseLook : MonoBehaviour
     private bool enPausa = false;
 
 
+    const string ClaveSensibilidad = "SensibilidadCamara";
+
     void Start()
     {
+        // Recupera la sensibilidad guardada (se conserva entre escenas y al cerrar el juego)
+        if (PlayerPrefs.HasKey(ClaveSensibilidad))
+            SliderSensitivity.value = PlayerPrefs.GetFloat(ClaveSensibilidad);
+        SliderSensitivity.onValueChanged.AddListener(GuardarSensibilidad);
         sensitivity = SliderSensitivity.value;
 
         Cursor.lockState = CursorLockMode.Locked;
@@ -27,13 +33,24 @@ public class MouseLook : MonoBehaviour
         menuPausa.SetActive(false);
     }
 
+    void GuardarSensibilidad(float valor)
+    {
+        PlayerPrefs.SetFloat(ClaveSensibilidad, valor);
+        PlayerPrefs.Save();
+    }
+
+    void OnDestroy()
+    {
+        if (SliderSensitivity != null) SliderSensitivity.onValueChanged.RemoveListener(GuardarSensibilidad);
+    }
+
     void Update()
     {
         sensitivity = SliderSensitivity.value;
 
-        // Detectar la tecla P
+        // Detectar la tecla ` (a la izquierda del 1)
         if (Keyboard.current != null &&
-            Keyboard.current.pKey.wasPressedThisFrame)
+            Keyboard.current.backquoteKey.wasPressedThisFrame)
         {
             if (enPausa)
                 Reanudar();

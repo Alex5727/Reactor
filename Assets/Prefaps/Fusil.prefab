@@ -798,7 +798,7 @@ MonoBehaviour:
   tracerPrefab: {fileID: 6115107755449726476, guid: ad56d31fb5d47af479e7d1f0529bb865, type: 3}
   impactPrefab: {fileID: 101133646639165350, guid: c20c74a4bfd9ece408900962fef07cbb, type: 3}
   hitStopTime: 0.035
-  AmountBullets: 20
+  AmountBullets: 25
   ContBullets: 0
   TimeRechard: 1
   TimerRechard: 0

@@ -1,0 +1,39 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
+
+// Va en el Toggle "SprintConfig" del Canvas.
+// Activado   -> el dash del jugador se hace con Shift (izquierdo).
+// Desactivado -> el dash se hace con Bloq Mayus (CapsLock).
+[RequireComponent(typeof(Toggle))]
+public class SprintConfig : MonoBehaviour
+{
+    public Key teclaActivado = Key.LeftShift;
+    public Key teclaDesactivado = Key.CapsLock;
+    public PlayerMovement jugador;     // opcional: si esta vacio se busca solo
+
+    Toggle toggle;
+
+    void Awake()
+    {
+        toggle = GetComponent<Toggle>();
+        toggle.onValueChanged.AddListener(Aplicar);
+    }
+
+    void Start()
+    {
+        Aplicar(toggle.isOn);
+    }
+
+    void OnDestroy()
+    {
+        if (toggle != null) toggle.onValueChanged.RemoveListener(Aplicar);
+    }
+
+    void Aplicar(bool activado)
+    {
+        if (jugador == null) jugador = FindFirstObjectByType<PlayerMovement>(FindObjectsInactive.Include);
+        if (jugador == null) return;
+        jugador.dashKey = activado ? teclaActivado : teclaDesactivado;
+    }
+}

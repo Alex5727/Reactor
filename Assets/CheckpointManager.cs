@@ -111,7 +111,8 @@ public class CheckpointManager : MonoBehaviour
         //sonido morir
         audioSource.PlayOneShot(SonidoMuerte);
 
-        // Iniciar el efecto visual
+        // Iniciar el efecto visual (si la escena no tiene la imagen asignada, se crea una sola)
+        if (deathOverlay == null) deathOverlay = CrearOverlay();
         if (deathOverlay != null)
             StartCoroutine(ScreenDeathEffect());
 
@@ -179,6 +180,26 @@ public class CheckpointManager : MonoBehaviour
         Bullet[] bullets = FindObjectsOfType<Bullet>();
 #endif
         foreach (Bullet b in bullets) Destroy(b.gameObject);
+    }
+
+    // Imagen roja a pantalla completa para las escenas que no tienen "Death Overlay" asignado
+    Image CrearOverlay()
+    {
+        GameObject go = new GameObject("DeathOverlay", typeof(RectTransform));
+        go.transform.SetParent(transform, false);
+        Canvas c = go.AddComponent<Canvas>();
+        c.renderMode = RenderMode.ScreenSpaceOverlay;
+        c.sortingOrder = 50;
+
+        GameObject img = new GameObject("Rojo", typeof(RectTransform));
+        img.transform.SetParent(go.transform, false);
+        RectTransform r = (RectTransform)img.transform;
+        r.anchorMin = Vector2.zero; r.anchorMax = Vector2.one;
+        r.offsetMin = r.offsetMax = Vector2.zero;
+        Image i = img.AddComponent<Image>();
+        i.raycastTarget = false;
+        i.color = new Color(1f, 0f, 0f, 0f);
+        return i;
     }
 
     IEnumerator ScreenDeathEffect()

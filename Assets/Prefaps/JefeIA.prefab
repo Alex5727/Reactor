@@ -1943,11 +1943,15 @@ MonoBehaviour:
   danoEscopeta: 6
   danoMetralla: 4
   danoEmbestida: 25
-  danoRayoPorSegundo: 45
+  danoRayoPorSegundo: 80
   danoSalto: 20
   danoOnda: 18
+  danoOndaChoque: 15
+  radioOndaChoque: 10.5
   danoOrbe: 18
   multiplicadorAturdido: 1.5
+  ajustarHitboxAuto: 1
+  hundirModelo: 0
   alturaRayo: 0.9
   colorBala: {r: 0.4575472, g: 0.64879, b: 1, a: 1}
   colorRayo: {r: 1, g: 0.15, b: 0.1, a: 1}

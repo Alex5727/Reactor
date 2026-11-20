@@ -49,6 +49,8 @@ public class BossSoldier : MonoBehaviour, IDamageable
     public float danoRayoPorSegundo = 45f;
     public float danoSalto = 20f;
     public float danoOnda = 18f;
+    public float danoOndaChoque = 15f;              // onda en esfera al chocar con una pared en la embestida
+    public float radioOndaChoque = 4.5f;
     public float danoOrbe = 18f;
     public float multiplicadorAturdido = 1.5f;      // dano extra mientras esta aturdido
 
@@ -623,6 +625,8 @@ public class BossSoldier : MonoBehaviour, IDamageable
             if (choco)
             {
                 BossProjectile.Impacto(transform.position + Vector3.up + transform.forward, Color.white, 3f);
+                OndaEsfera.Crear(transform.position + Vector3.up + transform.forward * 0.8f, colorOnda, danoOndaChoque * Mult,
+                                 jugadorPM, radioOndaChoque, 0.35f);
                 yield return Aturdido(1.8f);
                 yield break;   // tras chocar no encadena otra embestida
             }
@@ -1115,4 +1119,57 @@ public class OndaExpansiva : MonoBehaviour
         }
         if (radio >= radioMax) Destroy(gameObject);
     }
+}
+
+// Onda en forma de esfera que se expande rapido desde un punto; dana una vez al jugador si lo alcanza.
+public class OndaEsfera : MonoBehaviour
+{
+    float radioMax, duracion, dano, t;
+    bool golpeo;
+    PlayerMovement jugador;
+    CharacterController jugadorCC;
+    Renderer rend;
+    Material mat;
+    Color color;
+
+    public static void Crear(Vector3 centro, Color color, float dano, PlayerMovement jugador, float radioMax, float duracion)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        go.name = "OndaChoqueJefe";
+        Object.Destroy(go.GetComponent<Collider>());
+        go.transform.position = centro;
+        go.transform.localScale = Vector3.one * 0.5f;
+        OndaEsfera o = go.AddComponent<OndaEsfera>();
+        o.color = color; o.dano = dano; o.jugador = jugador; o.radioMax = radioMax; o.duracion = Mathf.Max(0.05f, duracion);
+        o.jugadorCC = jugador != null ? jugador.GetComponent<CharacterController>() : null;
+        o.rend = go.GetComponent<Renderer>();
+        o.mat = new Material(BossProjectile.MaterialEfectos());
+        o.rend.sharedMaterial = o.mat;
+        o.rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        o.rend.receiveShadows = false;
+    }
+
+    void Update()
+    {
+        t += Time.deltaTime;
+        float k = Mathf.Clamp01(t / duracion);
+        float radio = Mathf.Lerp(0.25f, radioMax, 1f - (1f - k) * (1f - k));   // rapido al inicio, frena al final
+        transform.localScale = Vector3.one * radio * 2f;
+        Color c = color; c.a = 0.55f * (1f - k);
+        mat.color = c;
+
+        if (!golpeo && jugador != null && !jugador.IsDead)
+        {
+            Vector3 p = jugadorCC != null ? jugadorCC.bounds.center : jugador.transform.position;
+            float alcance = radio + (jugadorCC != null ? jugadorCC.radius : 0.4f);
+            if ((p - transform.position).sqrMagnitude < alcance * alcance)
+            {
+                golpeo = true;
+                jugador.TakeDamage(dano);
+            }
+        }
+        if (k >= 1f) Destroy(gameObject);
+    }
+
+    void OnDestroy() { if (mat != null) Destroy(mat); }
 }

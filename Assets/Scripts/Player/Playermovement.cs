@@ -160,6 +160,8 @@ public class PlayerMovement : MonoBehaviour
 
         health = Mathf.Max(0f, health - amount);
 
+        if (amount > 0f) FeedbackDano.Mostrar(amount / Mathf.Max(1f, MaxHealt));
+
         if (health <= 0f) Die();
 
         ActualizarUI();
