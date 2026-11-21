@@ -60,12 +60,12 @@ public class BossHealthBarUI : MonoBehaviour
         txtNombre.text = nombre;
         RectTransform rn = txtNombre.rectTransform;
         rn.anchorMin = new Vector2(0, 1); rn.anchorMax = new Vector2(1, 1); rn.pivot = new Vector2(0.5f, 1f);
-        rn.anchoredPosition = Vector2.zero; rn.sizeDelta = new Vector2(0, 44);
+        rn.anchoredPosition = new Vector2(0, -34); rn.sizeDelta = new Vector2(0, 44);   // nombre debajo de la barra
 
         Image fondo = Imagen("Fondo", panel, new Color(0f, 0f, 0f, 0.7f));
         RectTransform rf = fondo.rectTransform;
         rf.anchorMin = new Vector2(0, 1); rf.anchorMax = new Vector2(1, 1); rf.pivot = new Vector2(0.5f, 1f);
-        rf.anchoredPosition = new Vector2(0, -48); rf.sizeDelta = new Vector2(0, 28);
+        rf.anchoredPosition = Vector2.zero; rf.sizeDelta = new Vector2(0, 28);   // barra arriba
 
         rastro = Imagen("Rastro", rf, new Color(1f, 1f, 1f, 0.85f));
         Llenar(rastro.rectTransform, 3f);

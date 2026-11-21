@@ -373,6 +373,7 @@ GameObject:
   - component: {fileID: 4935305645666611923}
   - component: {fileID: 4710762923127996856}
   - component: {fileID: 6315923684806258093}
+  - component: {fileID: 4417730091827364519}
   m_Layer: 5
   m_Name: Mira
   m_TagString: Untagged
@@ -420,14 +421,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0, b: 0, a: 1}
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: ad281c626598af94399b07b2f730512b, type: 3}
+  m_Sprite: {fileID: 21300000, guid: f72083d186c9427495713f1f65fbf115, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1790,3 +1791,18 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 7778622859436618095, guid: f7944657b8fd9a4458719e9036dc33c2, type: 3}
   m_PrefabInstance: {fileID: 4915892781397035132}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &4417730091827364519
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 610873265784800348}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6ff082c837048f0934319c770a75438, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  colorNormal: {r: 0, g: 0, b: 0, a: 1}
+  colorEnemigo: {r: 1, g: 0, b: 0, a: 1}
+  distanciaMaxima: 200

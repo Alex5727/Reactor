@@ -273,6 +273,9 @@ MonoBehaviour:
   audioSource: {fileID: -6803285074183668556}
   sonidoDeteccion: {fileID: 8300000, guid: f84a2bf3a6b43994a970dab1c4bc6fe8, type: 3}
   volumenExplosion: 1.5
+  sonidoPasos: {fileID: 8300000, guid: a7850d2a33731044aa4cd00bf2284171, type: 3}
+  volumenPasos: 0.39
+  velocidadPasos: 2
   maxHealth: 40
   dropChance: 0.73
   sightRange: 19

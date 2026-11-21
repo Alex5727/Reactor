@@ -46,7 +46,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
     public float danoEscopeta = 6f;
     public float danoMetralla = 4f;
     public float danoEmbestida = 25f;
-    public float danoRayoPorSegundo = 45f;
+    public float danoRayo = 25f;                    // dano fijo: un solo golpe por ataque de rayo
     public float danoSalto = 20f;
     public float danoOnda = 18f;
     public float danoOndaChoque = 15f;              // onda en esfera al chocar con una pared en la embestida
@@ -60,6 +60,8 @@ public class BossSoldier : MonoBehaviour, IDamageable
 
     [Header("Rayo")]
     public float alturaRayo = 0.9f;                 // altura sobre el suelo (bajo para poder saltarlo)
+    public bool rayoDoble = true;                   // dispara un segundo rayo arriba para castigar saltos muy altos
+    public float alturaRayoAlto = 4.4f;             // altura del rayo de arriba (un salto normal pasa por debajo)
 
     [Header("Colores de efectos")]
     public Color colorBala = new Color(1f, 0.55f, 0.1f);
@@ -72,7 +74,9 @@ public class BossSoldier : MonoBehaviour, IDamageable
     public AudioClip sonidoDisparo;
     public AudioClip sonidoRayo;
     public AudioClip sonidoEmbestida;
+    [Range(0f, 3f)] public float volumenSonidos = 1.3f;   // multiplica el volumen de todos los sonidos del jefe (1 = original)
     public AudioClip sonidoSalto;
+    public AudioClip sonidoCaida;
     public AudioClip sonidoMuerte;
 
     // ------------------------------------------------------------------ estado
@@ -103,6 +107,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
     float contactoCooldown;
 
     LineRenderer lineaAviso, lineaRayo, lineaRayoNucleo;
+    LineRenderer lineaAvisoAlto, lineaRayoAlto, lineaRayoAltoNucleo;
     GameObject brilloCarga;
     float destelloHasta;
     Color colorDestello;
@@ -177,6 +182,9 @@ public class BossSoldier : MonoBehaviour, IDamageable
         lineaAviso = CrearLinea("AvisoJefe", 0.1f, colorAviso);
         lineaRayo = CrearLinea("RayoJefe", 0.7f, colorRayo);
         lineaRayoNucleo = CrearLinea("RayoJefeNucleo", 0.25f, Color.white);
+        lineaAvisoAlto = CrearLinea("AvisoJefeAlto", 0.1f, colorAviso);
+        lineaRayoAlto = CrearLinea("RayoJefeAlto", 0.7f, colorRayo);
+        lineaRayoAltoNucleo = CrearLinea("RayoJefeAltoNucleo", 0.25f, Color.white);
         brilloCarga = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         brilloCarga.name = "CargaRayoJefe";
         Destroy(brilloCarga.GetComponent<Collider>());
@@ -210,6 +218,9 @@ public class BossSoldier : MonoBehaviour, IDamageable
         if (lineaAviso != null) Destroy(lineaAviso.gameObject);
         if (lineaRayo != null) Destroy(lineaRayo.gameObject);
         if (lineaRayoNucleo != null) Destroy(lineaRayoNucleo.gameObject);
+        if (lineaAvisoAlto != null) Destroy(lineaAvisoAlto.gameObject);
+        if (lineaRayoAlto != null) Destroy(lineaRayoAlto.gameObject);
+        if (lineaRayoAltoNucleo != null) Destroy(lineaRayoAltoNucleo.gameObject);
         if (brilloCarga != null) Destroy(brilloCarga);
     }
 
@@ -624,6 +635,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
 
             if (choco)
             {
+                Sonar(sonidoCaida, 1f);
                 BossProjectile.Impacto(transform.position + Vector3.up + transform.forward, Color.white, 3f);
                 OndaEsfera.Crear(transform.position + Vector3.up + transform.forward * 0.8f, colorOnda, danoOndaChoque * Mult,
                                  jugadorPM, radioOndaChoque, 0.35f);
@@ -658,6 +670,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
         float carga = 1.1f / Mult;
         float t = 0f;
         lineaAviso.enabled = true;
+        lineaAvisoAlto.enabled = rayoDoble;
         brilloCarga.SetActive(true);
         Sonar(sonidoRayo, 0.5f);
         while (t < carga)
@@ -674,6 +687,17 @@ public class BossSoldier : MonoBehaviour, IDamageable
             lineaAviso.SetPosition(2, fin);
             lineaAviso.widthMultiplier = Mathf.Lerp(0.04f, 0.2f, t / carga);
             ColorLinea(lineaAviso, colorAviso);
+            if (rayoDoble)
+            {
+                Vector3 a1 = PuntoBajoRayo(d, alturaRayoAlto);
+                Vector3 aFin = a1 + d * DistanciaLibre(a1, d, 70f);
+                lineaAvisoAlto.positionCount = 3;
+                lineaAvisoAlto.SetPosition(0, o);
+                lineaAvisoAlto.SetPosition(1, a1);
+                lineaAvisoAlto.SetPosition(2, aFin);
+                lineaAvisoAlto.widthMultiplier = lineaAviso.widthMultiplier;
+                ColorLinea(lineaAvisoAlto, colorAviso);
+            }
             brilloCarga.transform.position = o;
             brilloCarga.transform.localScale = Vector3.one * Mathf.Lerp(0.1f, 0.8f, t / carga);
             Mover(Vector3.zero);
@@ -681,6 +705,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
             yield return null;
         }
         lineaAviso.enabled = false;
+        lineaAvisoAlto.enabled = false;
 
         // ---- Disparo: rayo bajo que barre
         float duracion = fase >= 3 ? 3f : 2.2f;
@@ -689,8 +714,10 @@ public class BossSoldier : MonoBehaviour, IDamageable
         float yaw0 = Mathf.Atan2(dirInicial.x, dirInicial.z) * Mathf.Rad2Deg;
         float signo = Random.value < 0.5f ? 1f : -1f;
         lineaRayo.enabled = lineaRayoNucleo.enabled = true;
+        lineaRayoAlto.enabled = lineaRayoAltoNucleo.enabled = rayoDoble;
         Sonar(sonidoRayo, 1f);
 
+        bool rayoYaGolpeo = false;
         t = 0f;
         while (t < duracion)
         {
@@ -718,14 +745,37 @@ public class BossSoldier : MonoBehaviour, IDamageable
             brilloCarga.transform.position = o;
             brilloCarga.transform.localScale = Vector3.one * Random.Range(0.7f, 0.95f);
 
-            if (JugadorEnRayo(p1, fin, 0.45f))
-                jugadorPM?.TakeDamage(danoRayoPorSegundo * Time.deltaTime);
+            bool tocado = JugadorEnRayo(p1, fin, 0.45f);
+
+            if (rayoDoble)
+            {
+                Vector3 a1 = PuntoBajoRayo(d, alturaRayoAlto);
+                Vector3 aFin = a1 + d * DistanciaLibre(a1, d, 70f);
+                foreach (LineRenderer lr in new[] { lineaRayoAlto, lineaRayoAltoNucleo })
+                {
+                    lr.positionCount = 3;
+                    lr.SetPosition(0, o);
+                    lr.SetPosition(1, a1);
+                    lr.SetPosition(2, aFin);
+                }
+                lineaRayoAlto.widthMultiplier = Random.Range(0.6f, 0.8f);
+                lineaRayoAltoNucleo.widthMultiplier = Random.Range(0.2f, 0.3f);
+                // el de arriba perdona un poco mas (radio de golpe menor)
+                tocado |= JugadorEnRayo(a1, aFin, 0.3f);
+            }
+
+            if (tocado && !rayoYaGolpeo)
+            {
+                rayoYaGolpeo = true;
+                jugadorPM?.TakeDamage(danoRayo);
+            }
 
             Mover(Vector3.zero);
             t += Time.deltaTime;
             yield return null;
         }
         lineaRayo.enabled = lineaRayoNucleo.enabled = false;
+        lineaRayoAlto.enabled = lineaRayoAltoNucleo.enabled = false;
         brilloCarga.SetActive(false);
 
         // Ventana para castigarlo
@@ -783,6 +833,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
             yield return Esperar(0.45f);
             OndaExpansiva.Crear(destino, colorOnda, danoOnda, jugadorPM, 15f * Mult, 30f);
         }
+        Sonar(sonidoCaida, 1f);
         yield return Esperar(0.5f);
     }
 
@@ -915,6 +966,9 @@ public class BossSoldier : MonoBehaviour, IDamageable
         if (lineaAviso != null) lineaAviso.enabled = false;
         if (lineaRayo != null) lineaRayo.enabled = false;
         if (lineaRayoNucleo != null) lineaRayoNucleo.enabled = false;
+        if (lineaAvisoAlto != null) lineaAvisoAlto.enabled = false;
+        if (lineaRayoAlto != null) lineaRayoAlto.enabled = false;
+        if (lineaRayoAltoNucleo != null) lineaRayoAltoNucleo.enabled = false;
         if (brilloCarga != null) brilloCarga.SetActive(false);
         if (anim != null) anim.speed = 1f;
         if (!cc.enabled && !muerto) cc.enabled = true;
@@ -937,10 +991,12 @@ public class BossSoldier : MonoBehaviour, IDamageable
         return p;
     }
 
-    Vector3 PuntoBajoRayo(Vector3 dir)
+    Vector3 PuntoBajoRayo(Vector3 dir) { return PuntoBajoRayo(dir, alturaRayo); }
+
+    Vector3 PuntoBajoRayo(Vector3 dir, float altura)
     {
         Vector3 p = transform.position + dir * 2.5f * transform.lossyScale.x;
-        p.y = AlturaSuelo(transform.position) + alturaRayo;
+        p.y = AlturaSuelo(transform.position) + altura;
         return p;
     }
 
@@ -1034,7 +1090,7 @@ public class BossSoldier : MonoBehaviour, IDamageable
 
     void Sonar(AudioClip clip, float volumen)
     {
-        if (clip != null) audioSrc.PlayOneShot(clip, volumen);
+        if (clip != null) audioSrc.PlayOneShot(clip, volumen * volumenSonidos);
     }
 
     LineRenderer CrearLinea(string nombre, float ancho, Color color)

@@ -1,0 +1,1226 @@
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Events;
+
+// Jefe "Soldado". Pelea por fases con varios ataques:
+//  - Rafaga: rafagas de 3 balas rapidas que predicen tu movimiento  -> muevete / dash
+//  - Escopeta: abanico de balas                                      -> salta o pasa por un hueco con dash
+//  - Metralla: barrido de disparo automatico                         -> corre en contra del barrido
+//  - Embestida: marca una linea en el suelo y carga a toda velocidad -> dash a un lado (si choca con una pared queda aturdido y recibe mas dano)
+//  - Rayo: carga un rayo bajo que barre el escenario                 -> doble salto sobre el
+//  - Salto aplastante (fase 2+): cae sobre ti y suelta ondas         -> salta cuando pase la onda
+//  - Orbes teledirigidos (fase 2+): te persiguen; se pueden destruir a balazos
+// Fases: 100-66% / 66-33% / 33-0%. En cada fase es mas rapido y agresivo.
+// Mientras se reposiciona se mueve en circulos alrededor del jugador y esquiva cuando le aciertas.
+[RequireComponent(typeof(CharacterController))]
+public class BossSoldier : MonoBehaviour, IDamageable
+{
+    enum Ataque { Ninguno, Rafaga, Escopeta, Metralla, Embestida, Rayo, Salto, Orbes }
+
+    [Header("General")]
+    public string nombreJefe = "JEFE SOLDADO";
+    public float vidaMaxima = 2000f;
+    public float distanciaActivacion = 35f;
+    public int puntosAlDerrotar = 2000;
+
+    [Header("Fases (porcentaje de vida en que empieza cada una)")]
+    [Range(0f, 1f)] public float vidaFase2 = 0.75f;   // 0.75 = entra a fase 2 al bajar del 75% de vida
+    [Range(0f, 1f)] public float vidaFase3 = 0.40f;   // 0.40 = entra a la fase final al bajar del 40% de vida
+    public TMP_FontAsset fuente;                    // opcional, para el nombre de la barra
+    public Color colorBarraVida = new Color(0.85f, 0.1f, 0.1f);
+    public UnityEvent alMorir;                      // por ejemplo, abrir una puerta o cargar escena
+
+    [Header("Movimiento")]
+    public float velocidadMovimiento = 5.5f;
+    public float distanciaPreferida = 14f;
+    public float velocidadEmbestida = 26f;
+    public float esquivaVelocidad = 16f;
+    public float esquivaDuracion = 0.28f;
+    public float esquivaCooldown = 2.2f;
+    public float gravedad = -30f;
+
+    [Header("Dano de cada ataque")]
+    public float danoRafaga = 8f;
+    public float danoEscopeta = 6f;
+    public float danoMetralla = 4f;
+    public float danoEmbestida = 25f;
+    public float danoRayoPorSegundo = 45f;
+    public float danoSalto = 20f;
+    public float danoOnda = 18f;
+    public float danoOndaChoque = 15f;              // onda en esfera al chocar con una pared en la embestida
+    public float radioOndaChoque = 4.5f;
+    public float danoOrbe = 18f;
+    public float multiplicadorAturdido = 1.5f;      // dano extra mientras esta aturdido
+
+    [Header("Hitbox (ajuste a los pies)")]
+    public bool ajustarHitboxAuto = true;           // ajusta el CharacterController al esqueleto al iniciar
+    public float hundirModelo = 0f;                 // metros: positivo baja el modelo, negativo lo sube
+
+    [Header("Rayo")]
+    public float alturaRayo = 0.9f;                 // altura sobre el suelo (bajo para poder saltarlo)
+    public bool rayoDoble = true;                   // dispara un segundo rayo arriba para castigar saltos muy altos
+    public float alturaRayoAlto = 4.4f;             // altura del rayo de arriba (un salto normal pasa por debajo)
+
+    [Header("Colores de efectos")]
+    public Color colorBala = new Color(1f, 0.55f, 0.1f);
+    public Color colorRayo = new Color(1f, 0.15f, 0.1f);
+    public Color colorAviso = new Color(1f, 0.1f, 0.1f, 0.55f);
+    public Color colorOrbe = new Color(0.65f, 0.25f, 1f);
+    public Color colorOnda = new Color(1f, 0.45f, 0.1f);
+
+    [Header("Sonidos (opcional)")]
+    public AudioClip sonidoDisparo;
+    public AudioClip sonidoRayo;
+    public AudioClip sonidoEmbestida;
+    public AudioClip sonidoSalto;
+    public AudioClip sonidoCaida;
+    public AudioClip sonidoMuerte;
+
+    // ------------------------------------------------------------------ estado
+    CharacterController cc;
+    Animator anim;
+    AudioSource audioSrc;
+    Transform jugador;
+    PlayerMovement jugadorPM;
+    CharacterController jugadorCC;
+    Transform manoDerecha;
+    Transform cadera;
+    static readonly int HashAgachado = Animator.StringToHash("Agachado");
+    Renderer[] renderers;
+    BossHealthBarUI ui;
+
+    float vida;
+    int fase = 1;
+    bool activo, muerto, invulnerable, aturdido;
+    bool peleaHabilitada = true;      // false mientras espera a un ActivadorJefe
+    float velY;
+    float signoStrafe = 1f;
+    float ultimoGolpe = -10f, proximaEsquiva;
+    Vector3 jugadorVel, jugadorPosAnterior;
+    Vector3 posicionInicial;
+    Quaternion rotacionInicial;
+    string estadoAnim = "";
+    Ataque ultimoAtaque = Ataque.Ninguno;
+    float contactoCooldown;
+
+    LineRenderer lineaAviso, lineaRayo, lineaRayoNucleo;
+    LineRenderer lineaAvisoAlto, lineaRayoAlto, lineaRayoAltoNucleo;
+    GameObject brilloCarga;
+    float destelloHasta;
+    Color colorDestello;
+    MaterialPropertyBlock mpb;
+
+    float Mult => fase == 1 ? 1f : (fase == 2 ? 1.15f : 1.3f);
+
+    // ================================================================== Inicio
+
+    // Ajusta la capsula del CharacterController a los pies y la cabeza del modelo para que no flote.
+    void AjustarHitbox()
+    {
+        if (cc == null) return;
+        float escala = Mathf.Max(transform.lossyScale.y, 0.0001f);
+        float suelo = 0f, alto = cc.height;
+        bool okEsqueleto = false;
+
+        if (ajustarHitboxAuto && anim != null && anim.isHuman)
+        {
+            Transform pieI = anim.GetBoneTransform(HumanBodyBones.LeftFoot);
+            Transform pieD = anim.GetBoneTransform(HumanBodyBones.RightFoot);
+            Transform cabeza = anim.GetBoneTransform(HumanBodyBones.Head);
+            if (pieI != null && pieD != null && cabeza != null)
+            {
+                Transform dedoI = anim.GetBoneTransform(HumanBodyBones.LeftToes);
+                Transform dedoD = anim.GetBoneTransform(HumanBodyBones.RightToes);
+                float tobillo = Mathf.Min(YLocal(pieI), YLocal(pieD));
+                float dedos = (dedoI != null && dedoD != null) ? Mathf.Min(YLocal(dedoI), YLocal(dedoD)) : tobillo;
+                float yCabeza = YLocal(cabeza);
+                float altoCuerpo = yCabeza - Mathf.Min(tobillo, dedos);
+                // la suela esta un poco por debajo de los huesos del pie
+                suelo = Mathf.Min(tobillo, dedos) - altoCuerpo * 0.03f;
+                alto = (yCabeza - suelo) * 1.1f;
+                okEsqueleto = alto > 0.1f;
+            }
+        }
+        if (!ajustarHitboxAuto && Mathf.Approximately(hundirModelo, 0f)) return;
+        if (!okEsqueleto) { suelo = cc.center.y - cc.height * 0.5f - cc.skinWidth / escala; alto = cc.height; }
+
+        cc.height = alto;
+        cc.radius = Mathf.Min(cc.radius, alto * 0.45f);
+        // la capsula descansa a "skinWidth" (en metros) sobre el suelo: se compensa para que los pies toquen
+        float y = suelo + alto * 0.5f + cc.skinWidth / escala + hundirModelo / escala;
+        cc.center = new Vector3(0f, y, 0f);
+    }
+
+    float YLocal(Transform t) { return transform.InverseTransformPoint(t.position).y; }
+
+    void Awake()
+    {
+        cc = GetComponent<CharacterController>();
+        anim = GetComponentInChildren<Animator>();
+        if (anim != null) anim.applyRootMotion = false;
+        audioSrc = gameObject.AddComponent<AudioSource>();
+        audioSrc.playOnAwake = false;
+        audioSrc.spatialBlend = 0.7f;
+        audioSrc.maxDistance = 80f;
+
+        // Las balas salen de la mano derecha del esqueleto humanoide (el objeto "AssaultRifle"
+        // de este modelo es solo la malla y su origen esta lejos del personaje)
+        if (anim != null && anim.isHuman) manoDerecha = anim.GetBoneTransform(HumanBodyBones.RightHand);
+        if (manoDerecha == null) manoDerecha = BuscarHijo(transform, "Hand_Right");
+        if (anim != null && anim.isHuman) cadera = anim.GetBoneTransform(HumanBodyBones.Hips);
+        AjustarHitbox();
+        renderers = GetComponentsInChildren<Renderer>();
+        mpb = new MaterialPropertyBlock();
+
+        vida = vidaMaxima;
+        posicionInicial = transform.position;
+        rotacionInicial = transform.rotation;
+
+        lineaAviso = CrearLinea("AvisoJefe", 0.1f, colorAviso);
+        lineaRayo = CrearLinea("RayoJefe", 0.7f, colorRayo);
+        lineaRayoNucleo = CrearLinea("RayoJefeNucleo", 0.25f, Color.white);
+        lineaAvisoAlto = CrearLinea("AvisoJefeAlto", 0.1f, colorAviso);
+        lineaRayoAlto = CrearLinea("RayoJefeAlto", 0.7f, colorRayo);
+        lineaRayoAltoNucleo = CrearLinea("RayoJefeAltoNucleo", 0.25f, Color.white);
+        brilloCarga = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        brilloCarga.name = "CargaRayoJefe";
+        Destroy(brilloCarga.GetComponent<Collider>());
+        Renderer br = brilloCarga.GetComponent<Renderer>();
+        br.sharedMaterial = BossProjectile.MaterialEfectos();
+        br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        MaterialPropertyBlock b = new MaterialPropertyBlock();
+        b.SetColor("_Color", colorRayo);
+        br.SetPropertyBlock(b);
+        brilloCarga.SetActive(false);
+    }
+
+    void Start()
+    {
+        BuscarJugador();
+        if (vidaFase3 > vidaFase2) vidaFase3 = vidaFase2;   // la fase 3 siempre va despues de la 2
+        ui = BossHealthBarUI.Crear(nombreJefe, fuente, colorBarraVida, vidaFase2, vidaFase3);
+        ui.Actualizar(vida, vidaMaxima);
+        StartCoroutine(Cerebro());
+    }
+
+    // Refleja en la barra los cambios de nombreJefe hechos desde el Inspector (tambien durante Play)
+    void OnValidate()
+    {
+        if (ui != null) ui.CambiarNombre(nombreJefe);
+    }
+
+    void OnDestroy()
+    {
+        if (ui != null) Destroy(ui.gameObject);
+        if (lineaAviso != null) Destroy(lineaAviso.gameObject);
+        if (lineaRayo != null) Destroy(lineaRayo.gameObject);
+        if (lineaRayoNucleo != null) Destroy(lineaRayoNucleo.gameObject);
+        if (lineaAvisoAlto != null) Destroy(lineaAvisoAlto.gameObject);
+        if (lineaRayoAlto != null) Destroy(lineaRayoAlto.gameObject);
+        if (lineaRayoAltoNucleo != null) Destroy(lineaRayoAltoNucleo.gameObject);
+        if (brilloCarga != null) Destroy(brilloCarga);
+    }
+
+    void BuscarJugador()
+    {
+        GameObject p = GameObject.FindGameObjectWithTag("Player");
+        if (p == null) return;
+        jugadorPM = p.GetComponentInParent<PlayerMovement>();
+        if (jugadorPM == null) jugadorPM = p.GetComponentInChildren<PlayerMovement>();
+        jugador = jugadorPM != null ? jugadorPM.transform : p.transform;
+        jugadorCC = jugador.GetComponent<CharacterController>();
+        jugadorPosAnterior = jugador.position;
+    }
+
+    bool JugadorVivo()
+    {
+        if (jugador == null) BuscarJugador();
+        return jugador != null && (jugadorPM == null || !jugadorPM.IsDead);
+    }
+
+    // ================================================================== Update
+
+    void Update()
+    {
+        float dt = Time.deltaTime;
+
+        // Velocidad del jugador (para predecir hacia donde disparar)
+        if (jugador != null && dt > 0f)
+        {
+            Vector3 v = (jugador.position - jugadorPosAnterior) / dt;
+            jugadorVel = Vector3.Lerp(jugadorVel, v, 1f - Mathf.Exp(-8f * dt));
+            jugadorPosAnterior = jugador.position;
+        }
+
+        // Dano por contacto
+        contactoCooldown -= dt;
+        if (activo && !muerto && JugadorVivo() && contactoCooldown <= 0f &&
+            DistanciaPlana(jugador.position) < cc.radius * transform.lossyScale.x + 0.9f &&
+            Mathf.Abs(CentroJugador().y - (transform.position.y + 1f)) < 2f)
+        {
+            jugadorPM?.TakeDamage(10f);
+            contactoCooldown = 1f;
+        }
+
+        // Destello al recibir dano
+        if (destelloHasta > 0f && Time.time >= destelloHasta)
+        {
+            destelloHasta = 0f;
+            foreach (Renderer r in renderers) if (r != null) r.SetPropertyBlock(null);
+        }
+    }
+
+    // La animacion de agacharse del pack viene mirando hacia atras: despues de que el Animator
+    // pone la pose, se gira el cuerpo 180 grados (de forma gradual durante la transicion).
+    void LateUpdate()
+    {
+        if (cadera == null || anim == null) return;
+        float peso = PesoEstado(HashAgachado);
+        if (peso > 0.001f) cadera.RotateAround(transform.position, transform.up, 180f * peso);
+    }
+
+    float PesoEstado(int hash)
+    {
+        AnimatorStateInfo actual = anim.GetCurrentAnimatorStateInfo(0);
+        if (anim.IsInTransition(0))
+        {
+            AnimatorStateInfo siguiente = anim.GetNextAnimatorStateInfo(0);
+            float t = anim.GetAnimatorTransitionInfo(0).normalizedTime;
+            float w = 0f;
+            if (actual.shortNameHash == hash) w += 1f - t;
+            if (siguiente.shortNameHash == hash) w += t;
+            return Mathf.Clamp01(w);
+        }
+        return actual.shortNameHash == hash ? 1f : 0f;
+    }
+
+    // ================================================================== Cerebro
+
+    IEnumerator Cerebro()
+    {
+        while (!muerto)
+        {
+            // ---- Espera a que el jugador se acerque
+            Animar("Idle");
+            while (!activo)
+            {
+                Mover(Vector3.zero);
+                if (peleaHabilitada && JugadorVivo() && Vector3.Distance(jugador.position, transform.position) < distanciaActivacion)
+                    Activar();
+                yield return null;
+            }
+
+            // ---- Pelea
+            while (activo && !muerto)
+            {
+                if (!JugadorVivo()) { yield return ReiniciarPelea(); break; }
+
+                int faseDeseada = vida > vidaMaxima * vidaFase2 ? 1 : (vida > vidaMaxima * vidaFase3 ? 2 : 3);
+                if (faseDeseada > fase) { yield return CambioFase(faseDeseada); continue; }
+
+                yield return Reposicionar(Random.Range(0.9f, 1.8f) / Mult, 1f);
+                if (Abortar()) continue;
+
+                Ataque a = ElegirAtaque();
+                ultimoAtaque = a;
+                switch (a)
+                {
+                    case Ataque.Rafaga: yield return AtaqueRafaga(); break;
+                    case Ataque.Escopeta: yield return AtaqueEscopeta(); break;
+                    case Ataque.Metralla: yield return AtaqueMetralla(); break;
+                    case Ataque.Embestida: yield return AtaqueEmbestida(); break;
+                    case Ataque.Rayo: yield return AtaqueRayo(); break;
+                    case Ataque.Salto: yield return AtaqueSalto(); break;
+                    case Ataque.Orbes: yield return AtaqueOrbes(); break;
+                }
+                LimpiarEfectos();
+            }
+        }
+    }
+
+    void Activar()
+    {
+        if (activo || muerto) return;
+        activo = true;
+        ui.Mostrar(true);
+        ui.Actualizar(vida, vidaMaxima);
+    }
+
+    bool Abortar() => muerto || !activo || !JugadorVivo();
+
+    // ------------------------------------------------------------------ Control externo (ActivadorJefe)
+    public bool Muerto => muerto;
+
+    // El jefe no recibe dano ni empieza a pelear hasta que se llame a IniciarPelea()
+    public void BloquearPelea()
+    {
+        peleaHabilitada = false;
+    }
+
+    public void IniciarPelea()
+    {
+        if (muerto) return;
+        peleaHabilitada = true;
+        Activar();
+    }
+
+    Ataque ElegirAtaque()
+    {
+        float d = DistanciaPlana(jugador.position);
+        var opciones = new List<(Ataque, float)>
+        {
+            (Ataque.Rafaga, d > 8f ? 3f : 1.2f),
+            (Ataque.Escopeta, d < 15f ? 3f : 1f),
+            (Ataque.Metralla, 2f),
+            (Ataque.Embestida, d > 7f ? 2.5f : 1f),
+            (Ataque.Rayo, fase == 1 ? 1.5f : 2.5f),
+        };
+        if (fase >= 2)
+        {
+            opciones.Add((Ataque.Salto, 2.5f));
+            opciones.Add((Ataque.Orbes, fase >= 3 ? 2.5f : 1.3f));
+        }
+
+        float total = 0f;
+        foreach (var o in opciones) if (o.Item1 != ultimoAtaque) total += o.Item2;
+        float r = Random.value * total;
+        foreach (var o in opciones)
+        {
+            if (o.Item1 == ultimoAtaque) continue;
+            r -= o.Item2;
+            if (r <= 0f) return o.Item1;
+        }
+        return Ataque.Rafaga;
+    }
+
+    // ================================================================== Movimiento
+
+    // Se mueve en circulo alrededor del jugador manteniendo distancia, y esquiva al recibir disparos
+    IEnumerator Reposicionar(float duracion, float factorVelocidad, bool permitirEsquiva = true)
+    {
+        float t = 0f;
+        float cambio = Random.Range(0.8f, 1.8f);
+        float esquivaRestante = 0f;
+        Vector3 esquivaDir = Vector3.zero;
+
+        while (t < duracion)
+        {
+            if (Abortar()) yield break;
+            float dt = Time.deltaTime;
+
+            Vector3 aJugador = Plano(jugador.position - transform.position);
+            float d = Mathf.Max(aJugador.magnitude, 0.01f);
+            Vector3 dir = aJugador / d;
+            Vector3 tangente = Vector3.Cross(Vector3.up, dir) * signoStrafe;
+            float radial = Mathf.Clamp((d - distanciaPreferida) / 4f, -1f, 1f);
+            Vector3 vel = (tangente * 0.85f + dir * radial).normalized * velocidadMovimiento * Mult * factorVelocidad;
+
+            // Esquiva al recibir dano
+            if (permitirEsquiva && esquivaRestante <= 0f && Time.time - ultimoGolpe < 0.25f && Time.time >= proximaEsquiva)
+            {
+                esquivaRestante = esquivaDuracion;
+                esquivaDir = Vector3.Cross(Vector3.up, dir) * (Random.value < 0.5f ? 1f : -1f);
+                proximaEsquiva = Time.time + esquivaCooldown / Mult;
+            }
+            if (esquivaRestante > 0f)
+            {
+                esquivaRestante -= dt;
+                vel = esquivaDir * esquivaVelocidad;
+            }
+
+            CollisionFlags f = Mover(vel);
+            if ((f & CollisionFlags.Sides) != 0) signoStrafe = -signoStrafe;
+
+            Mirar(jugador.position, 540f);
+            AnimarMovimiento(vel);
+
+            cambio -= dt;
+            if (cambio <= 0f) { if (Random.value < 0.6f) signoStrafe = -signoStrafe; cambio = Random.Range(0.8f, 1.8f); }
+
+            t += dt;
+            yield return null;
+        }
+    }
+
+    CollisionFlags Mover(Vector3 horizontal)
+    {
+        if (!cc.enabled) return CollisionFlags.None;
+        float dt = Time.deltaTime;
+        if (cc.isGrounded && velY < 0f) velY = -2f;
+        velY += gravedad * dt;
+
+        // No salir del escenario: si adelante no hay suelo, no avanza
+        if (horizontal.sqrMagnitude > 0.01f && !HaySuelo(transform.position + horizontal.normalized * 1.5f))
+        {
+            horizontal = Vector3.zero;
+            signoStrafe = -signoStrafe;
+        }
+        return cc.Move((horizontal + Vector3.up * velY) * dt);
+    }
+
+    bool HaySuelo(Vector3 punto)
+    {
+        return Physics.Raycast(punto + Vector3.up * 1.5f, Vector3.down, 8f, ~0, QueryTriggerInteraction.Ignore);
+    }
+
+    void Mirar(Vector3 punto, float gradosPorSegundo)
+    {
+        Vector3 dir = Plano(punto - transform.position);
+        if (dir.sqrMagnitude < 0.001f) return;
+        Quaternion q = Quaternion.LookRotation(dir);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, q, gradosPorSegundo * Time.deltaTime);
+    }
+
+    // ================================================================== Ataques
+
+    IEnumerator AtaqueRafaga()
+    {
+        int rafagas = fase >= 3 ? 4 : 3;
+        for (int r = 0; r < rafagas; r++)
+        {
+            Animar("Rafaga", 0.08f);
+            for (int i = 0; i < 3; i++)
+            {
+                if (Abortar()) yield break;
+                Mirar(jugador.position, 900f);
+                Vector3 o = PuntoDisparo();
+                BossProjectile.Disparar(o, Apuntar(o, 34f, 0.8f), 34f, danoRafaga, colorBala, transform, 0.22f);
+                Sonar(sonidoDisparo, 0.6f);
+                yield return Esperar(0.09f);
+            }
+            yield return Reposicionar(0.45f / Mult, 0.45f, false);
+        }
+    }
+
+    IEnumerator AtaqueEscopeta()
+    {
+        int olas = fase >= 3 ? 2 : 1;
+        int balas = fase == 1 ? 7 : 9;
+        float arco = 60f;
+
+        // Aviso
+        Animar("ApuntarQuieto");
+        float t = 0f;
+        while (t < 0.45f / Mult)
+        {
+            if (Abortar()) yield break;
+            Mirar(jugador.position, 600f);
+            Destello(new Color(1f, 0.6f, 0.2f), 0.05f);
+            t += Time.deltaTime;
+            yield return null;
+        }
+
+        for (int w = 0; w < olas; w++)
+        {
+            Animar("DisparoUnico", 0.05f);
+            Vector3 o = PuntoDisparo();
+            Vector3 baseDir = Apuntar(o, 20f, 0.2f);
+            float desfase = w % 2 == 0 ? 0f : arco / (balas - 1) * 0.5f;
+            for (int i = 0; i < balas; i++)
+            {
+                float a = -arco * 0.5f + arco * i / (balas - 1) + desfase;
+                Vector3 d = Quaternion.AngleAxis(a, Vector3.up) * baseDir;
+                BossProjectile.Disparar(o, d, 20f, danoEscopeta, colorBala, transform, 0.35f);
+            }
+            Sonar(sonidoDisparo, 1f);
+            yield return Esperar(0.4f);
+        }
+        Animar("Recarga");
+        yield return Esperar(0.5f / Mult);
+    }
+
+    IEnumerator AtaqueMetralla()
+    {
+        Animar("Automatico");
+        float duracion = 2.2f;
+        float cadencia = fase >= 3 ? 16f : 12f;
+        float t = 0f, siguiente = 0f;
+        float fasebarrido = Random.Range(0f, 6f);
+        while (t < duracion)
+        {
+            if (Abortar()) yield break;
+            float dt = Time.deltaTime;
+
+            // Se mueve despacio mientras dispara
+            Vector3 dir = Plano(jugador.position - transform.position).normalized;
+            Vector3 tangente = Vector3.Cross(Vector3.up, dir) * signoStrafe;
+            CollisionFlags f = Mover(tangente * velocidadMovimiento * 0.35f);
+            if ((f & CollisionFlags.Sides) != 0) signoStrafe = -signoStrafe;
+            Mirar(jugador.position, 360f);
+
+            if (t >= siguiente)
+            {
+                siguiente += 1f / cadencia;
+                Vector3 o = PuntoDisparo();
+                Vector3 hacia = (CentroJugador() - o).normalized;
+                float barrido = Mathf.Sin(t * 2.4f + fasebarrido) * 35f;
+                Vector3 d = Quaternion.AngleAxis(barrido, Vector3.up) * hacia;
+                d = Quaternion.AngleAxis(Random.Range(-2f, 2f), transform.right) * d;
+                BossProjectile.Disparar(o, d, 28f, danoMetralla, colorBala, transform, 0.18f);
+                Sonar(sonidoDisparo, 0.35f);
+            }
+            t += dt;
+            yield return null;
+        }
+    }
+
+    IEnumerator AtaqueEmbestida()
+    {
+        int veces = fase >= 3 ? 2 : 1;
+        for (int v = 0; v < veces; v++)
+        {
+            // ---- Aviso: se agacha y marca la linea en el suelo
+            Animar("Agachado");
+            float aviso = 0.85f / Mult;
+            Vector3 objetivo = jugador.position;
+            float t = 0f;
+            lineaAviso.enabled = true;
+            while (t < aviso)
+            {
+                if (Abortar()) yield break;
+                if (t < aviso * 0.7f) objetivo = Vector3.Lerp(objetivo, jugador.position, 1f - Mathf.Exp(-6f * Time.deltaTime));
+                Mirar(objetivo, 720f);
+                Vector3 dirA = Plano(objetivo - transform.position).normalized;
+                float suelo = AlturaSuelo(transform.position);
+                Vector3 a = new Vector3(transform.position.x, suelo + 0.05f, transform.position.z);
+                Vector3 b = a + dirA * (DistanciaPlana(objetivo) + 7f);
+                lineaAviso.positionCount = 2;
+                lineaAviso.SetPosition(0, a);
+                lineaAviso.SetPosition(1, b);
+                float pulso = 0.5f + 0.5f * Mathf.Sin(t * 30f);
+                lineaAviso.widthMultiplier = Mathf.Lerp(1.2f, 1.8f, pulso);
+                ColorLinea(lineaAviso, new Color(colorAviso.r, colorAviso.g, colorAviso.b, colorAviso.a * (0.6f + 0.4f * pulso)));
+                Destello(new Color(1f, 0.3f, 0.3f), 0.04f);
+                Mover(Vector3.zero);
+                t += Time.deltaTime;
+                yield return null;
+            }
+            lineaAviso.enabled = false;
+
+            // ---- Carga
+            Animar("Correr", 0.05f);
+            if (anim != null) anim.speed = 1.7f;
+            Sonar(sonidoEmbestida, 1f);
+            Vector3 dir = Plano(objetivo - transform.position).normalized;
+            if (dir.sqrMagnitude < 0.01f) dir = transform.forward;
+            float recorrido = DistanciaPlana(objetivo) + 7f;
+            float hecho = 0f;
+            bool golpeo = false, choco = false;
+            transform.rotation = Quaternion.LookRotation(dir);
+
+            while (hecho < recorrido)
+            {
+                if (Abortar()) { if (anim != null) anim.speed = 1f; yield break; }
+                if (!HaySuelo(transform.position + dir * 1.5f)) break;
+
+                CollisionFlags f = Mover(dir * velocidadEmbestida);
+                hecho += velocidadEmbestida * Time.deltaTime;
+
+                bool cercaJugador = DistanciaPlana(jugador.position) < 2.4f &&
+                                    Mathf.Abs(CentroJugador().y - (transform.position.y + 1f)) < 2.2f;
+                if (!golpeo && cercaJugador)
+                {
+                    golpeo = true;
+                    jugadorPM?.TakeDamage(danoEmbestida);
+                    BossProjectile.Impacto(CentroJugador(), colorBala, 2f);
+                    break;
+                }
+                if ((f & CollisionFlags.Sides) != 0 && !cercaJugador) { choco = true; break; }
+                yield return null;
+            }
+            if (anim != null) anim.speed = 1f;
+
+            if (choco)
+            {
+                Sonar(sonidoCaida, 1f);
+                BossProjectile.Impacto(transform.position + Vector3.up + transform.forward, Color.white, 3f);
+                OndaEsfera.Crear(transform.position + Vector3.up + transform.forward * 0.8f, colorOnda, danoOndaChoque * Mult,
+                                 jugadorPM, radioOndaChoque, 0.35f);
+                yield return Aturdido(1.8f);
+                yield break;   // tras chocar no encadena otra embestida
+            }
+            Animar("Idle");
+            yield return Esperar(0.35f);
+        }
+    }
+
+    IEnumerator Aturdido(float duracion)
+    {
+        aturdido = true;
+        Animar("Recarga");
+        float t = 0f;
+        while (t < duracion)
+        {
+            if (muerto) break;
+            Mover(Vector3.zero);
+            if (Mathf.Repeat(t, 0.3f) < 0.15f) Destello(new Color(1f, 0.9f, 0.2f), 0.08f);
+            t += Time.deltaTime;
+            yield return null;
+        }
+        aturdido = false;
+    }
+
+    IEnumerator AtaqueRayo()
+    {
+        // ---- Carga: linea fina que te sigue
+        Animar("DisparoUnico");
+        float carga = 1.1f / Mult;
+        float t = 0f;
+        lineaAviso.enabled = true;
+        lineaAvisoAlto.enabled = rayoDoble;
+        brilloCarga.SetActive(true);
+        Sonar(sonidoRayo, 0.5f);
+        while (t < carga)
+        {
+            if (Abortar()) yield break;
+            Mirar(jugador.position, 300f);
+            Vector3 o = PuntoDisparo();
+            Vector3 d = Plano(jugador.position - transform.position).normalized;
+            Vector3 p1 = PuntoBajoRayo(d);
+            Vector3 fin = p1 + d * DistanciaLibre(p1, d, 70f);
+            lineaAviso.positionCount = 3;
+            lineaAviso.SetPosition(0, o);
+            lineaAviso.SetPosition(1, p1);
+            lineaAviso.SetPosition(2, fin);
+            lineaAviso.widthMultiplier = Mathf.Lerp(0.04f, 0.2f, t / carga);
+            ColorLinea(lineaAviso, colorAviso);
+            if (rayoDoble)
+            {
+                Vector3 a1 = PuntoBajoRayo(d, alturaRayoAlto);
+                Vector3 aFin = a1 + d * DistanciaLibre(a1, d, 70f);
+                lineaAvisoAlto.positionCount = 3;
+                lineaAvisoAlto.SetPosition(0, o);
+                lineaAvisoAlto.SetPosition(1, a1);
+                lineaAvisoAlto.SetPosition(2, aFin);
+                lineaAvisoAlto.widthMultiplier = lineaAviso.widthMultiplier;
+                ColorLinea(lineaAvisoAlto, colorAviso);
+            }
+            brilloCarga.transform.position = o;
+            brilloCarga.transform.localScale = Vector3.one * Mathf.Lerp(0.1f, 0.8f, t / carga);
+            Mover(Vector3.zero);
+            t += Time.deltaTime;
+            yield return null;
+        }
+        lineaAviso.enabled = false;
+        lineaAvisoAlto.enabled = false;
+
+        // ---- Disparo: rayo bajo que barre
+        float duracion = fase >= 3 ? 3f : 2.2f;
+        float barrido = fase >= 2 ? 150f : 110f;
+        Vector3 dirInicial = Plano(jugador.position - transform.position).normalized;
+        float yaw0 = Mathf.Atan2(dirInicial.x, dirInicial.z) * Mathf.Rad2Deg;
+        float signo = Random.value < 0.5f ? 1f : -1f;
+        lineaRayo.enabled = lineaRayoNucleo.enabled = true;
+        lineaRayoAlto.enabled = lineaRayoAltoNucleo.enabled = rayoDoble;
+        Sonar(sonidoRayo, 1f);
+
+        t = 0f;
+        while (t < duracion)
+        {
+            if (Abortar()) yield break;
+            float k = t / duracion;
+            float desplazamiento = fase >= 3
+                ? Mathf.Lerp(-barrido * 0.5f, barrido * 0.5f, Mathf.PingPong(k * 2f, 1f))
+                : Mathf.Lerp(-barrido * 0.5f, barrido * 0.5f, k);
+            float yaw = yaw0 + signo * desplazamiento;
+            Vector3 d = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            transform.rotation = Quaternion.LookRotation(d);
+
+            Vector3 o = PuntoDisparo();
+            Vector3 p1 = PuntoBajoRayo(d);
+            Vector3 fin = p1 + d * DistanciaLibre(p1, d, 70f);
+            foreach (LineRenderer lr in new[] { lineaRayo, lineaRayoNucleo })
+            {
+                lr.positionCount = 3;
+                lr.SetPosition(0, o);
+                lr.SetPosition(1, p1);
+                lr.SetPosition(2, fin);
+            }
+            lineaRayo.widthMultiplier = Random.Range(0.6f, 0.8f);
+            lineaRayoNucleo.widthMultiplier = Random.Range(0.2f, 0.3f);
+            brilloCarga.transform.position = o;
+            brilloCarga.transform.localScale = Vector3.one * Random.Range(0.7f, 0.95f);
+
+            bool tocado = JugadorEnRayo(p1, fin, 0.45f);
+
+            if (rayoDoble)
+            {
+                Vector3 a1 = PuntoBajoRayo(d, alturaRayoAlto);
+                Vector3 aFin = a1 + d * DistanciaLibre(a1, d, 70f);
+                foreach (LineRenderer lr in new[] { lineaRayoAlto, lineaRayoAltoNucleo })
+                {
+                    lr.positionCount = 3;
+                    lr.SetPosition(0, o);
+                    lr.SetPosition(1, a1);
+                    lr.SetPosition(2, aFin);
+                }
+                lineaRayoAlto.widthMultiplier = Random.Range(0.6f, 0.8f);
+                lineaRayoAltoNucleo.widthMultiplier = Random.Range(0.2f, 0.3f);
+                // el de arriba perdona un poco mas (radio de golpe menor)
+                tocado |= JugadorEnRayo(a1, aFin, 0.3f);
+            }
+
+            if (tocado)
+                jugadorPM?.TakeDamage(danoRayoPorSegundo * Time.deltaTime);
+
+            Mover(Vector3.zero);
+            t += Time.deltaTime;
+            yield return null;
+        }
+        lineaRayo.enabled = lineaRayoNucleo.enabled = false;
+        lineaRayoAlto.enabled = lineaRayoAltoNucleo.enabled = false;
+        brilloCarga.SetActive(false);
+
+        // Ventana para castigarlo
+        Animar("Recarga");
+        yield return Esperar(0.7f / Mult);
+    }
+
+    IEnumerator AtaqueSalto()
+    {
+        // Preparacion
+        Animar("Agachado");
+        yield return Esperar(0.35f / Mult);
+        if (Abortar()) yield break;
+
+        Vector3 inicio = transform.position;
+        Vector3 destino = jugador.position;
+        float sueloDestino = AlturaSuelo(destino);
+        destino.y = sueloDestino;
+        if (!HaySuelo(destino)) destino = inicio;
+
+        Animar("Salto", 0.05f);
+        Sonar(sonidoSalto, 1f);
+        cc.enabled = false;
+        float duracion = 1f / Mult;
+        float altura = 7f;
+        float t = 0f;
+        while (t < duracion)
+        {
+            if (muerto) { cc.enabled = true; yield break; }
+            float k = t / duracion;
+            // sigue un poco al jugador durante la primera mitad
+            if (k < 0.5f && JugadorVivo())
+            {
+                Vector3 nuevo = jugador.position;
+                if (HaySuelo(nuevo)) { nuevo.y = AlturaSuelo(nuevo); destino = Vector3.Lerp(destino, nuevo, Time.deltaTime * 2f); }
+            }
+            Vector3 p = Vector3.Lerp(inicio, destino, k);
+            p.y = Mathf.Lerp(inicio.y, destino.y, k) + altura * 4f * k * (1f - k);
+            transform.position = p;
+            Mirar(destino, 720f);
+            t += Time.deltaTime;
+            yield return null;
+        }
+        transform.position = destino;
+        cc.enabled = true;
+        velY = -2f;
+
+        // Aterrizaje: golpe + ondas
+        BossProjectile.Impacto(destino + Vector3.up * 0.5f, colorOnda, 5f);
+        if (JugadorVivo() && DistanciaPlana(jugador.position) < 3.5f) jugadorPM?.TakeDamage(danoSalto);
+        OndaExpansiva.Crear(destino, colorOnda, danoOnda, jugadorPM, 15f * Mult, 30f);
+        Animar("Idle");
+        if (fase >= 3)
+        {
+            yield return Esperar(0.45f);
+            OndaExpansiva.Crear(destino, colorOnda, danoOnda, jugadorPM, 15f * Mult, 30f);
+        }
+        Sonar(sonidoCaida, 1f);
+        yield return Esperar(0.5f);
+    }
+
+    IEnumerator AtaqueOrbes()
+    {
+        Animar("ApuntarQuieto");
+        float t = 0f;
+        while (t < 0.4f)
+        {
+            if (Abortar()) yield break;
+            Mirar(jugador.position, 600f);
+            Destello(colorOrbe, 0.05f);
+            Mover(Vector3.zero);
+            t += Time.deltaTime;
+            yield return null;
+        }
+
+        int n = fase >= 3 ? 4 : 3;
+        Vector3 haciaJugador = Plano(jugador.position - transform.position).normalized;
+        float yaw0 = Mathf.Atan2(haciaJugador.x, haciaJugador.z) * Mathf.Rad2Deg;
+        for (int i = 0; i < n; i++)
+        {
+            if (Abortar()) yield break;
+            Animar("DisparoUnico", 0.05f);
+            float yaw = yaw0 + Mathf.Lerp(-55f, 55f, n == 1 ? 0.5f : i / (float)(n - 1));
+            Vector3 d = Quaternion.Euler(-35f, yaw, 0f) * Vector3.forward;
+            BossProjectile.Orbe(PuntoDisparo(), d, 9f * Mult, danoOrbe, colorOrbe, transform, jugador, 100f);
+            Sonar(sonidoDisparo, 0.8f);
+            yield return Esperar(0.15f);
+        }
+        yield return Reposicionar(0.6f, 0.6f);
+    }
+
+    IEnumerator CambioFase(int nuevaFase)
+    {
+        fase = nuevaFase;
+        invulnerable = true;
+        LimpiarEfectos();
+        ui.AvisoFase(fase == 2 ? "¡FASE 2!" : "¡FASE FINAL!");
+        Animar("Agachado");
+        float t = 0f;
+        while (t < 0.7f)
+        {
+            if (muerto) yield break;
+            Destello(new Color(1f, 0.2f, 0.1f), 0.06f);
+            Mover(Vector3.zero);
+            t += Time.deltaTime;
+            yield return null;
+        }
+        OndaExpansiva.Crear(new Vector3(transform.position.x, AlturaSuelo(transform.position), transform.position.z),
+                            colorOnda, danoOnda, jugadorPM, 18f, 32f);
+        Animar("Idle");
+        yield return Esperar(0.6f);
+        invulnerable = false;
+    }
+
+    IEnumerator ReiniciarPelea()
+    {
+        // El jugador murio: el jefe vuelve a su lugar con la vida completa
+        LimpiarEfectos();
+        activo = false;
+        ui.Mostrar(false);
+        Animar("Idle");
+        while (!JugadorVivo()) { Mover(Vector3.zero); yield return null; }
+
+        vida = vidaMaxima;
+        fase = 1;
+        ultimoAtaque = Ataque.Ninguno;
+        cc.enabled = false;
+        transform.SetPositionAndRotation(posicionInicial, rotacionInicial);
+        cc.enabled = true;
+        ui.Actualizar(vida, vidaMaxima);
+    }
+
+    // ================================================================== Dano y muerte
+
+    public void TakeDamage(float amount)
+    {
+        if (muerto || invulnerable || !peleaHabilitada) return;
+        if (!activo) Activar();
+
+        vida -= amount * (aturdido ? multiplicadorAturdido : 1f);
+        ultimoGolpe = Time.time;
+        ui.Actualizar(Mathf.Max(vida, 0f), vidaMaxima);
+        Destello(aturdido ? new Color(1f, 0.9f, 0.3f) : new Color(1f, 0.35f, 0.35f), 0.08f);
+
+        if (vida <= 0f) Morir();
+    }
+
+    void Morir()
+    {
+        if (muerto) return;
+        muerto = true;
+        StopAllCoroutines();
+        LimpiarEfectos();
+        if (anim != null) anim.speed = 1f;
+        Animar("Muerte", 0.1f);
+        Sonar(sonidoMuerte, 1f);
+        cc.enabled = false;
+        ui.Actualizar(0f, vidaMaxima);
+        ui.AvisoFase("¡JEFE DERROTADO!");
+        StartCoroutine(OcultarBarra());
+
+        ScoreManager.EnemigoEliminado(puntosAlDerrotar, transform.position + Vector3.up * 2f);
+        alMorir?.Invoke();
+    }
+
+    IEnumerator OcultarBarra()
+    {
+        yield return new WaitForSeconds(3f);
+        ui.Mostrar(false);
+    }
+
+    // ================================================================== Utilidades
+
+    IEnumerator Esperar(float segundos)
+    {
+        float t = 0f;
+        while (t < segundos)
+        {
+            if (muerto) yield break;
+            Mover(Vector3.zero);
+            t += Time.deltaTime;
+            yield return null;
+        }
+    }
+
+    void LimpiarEfectos()
+    {
+        if (lineaAviso != null) lineaAviso.enabled = false;
+        if (lineaRayo != null) lineaRayo.enabled = false;
+        if (lineaRayoNucleo != null) lineaRayoNucleo.enabled = false;
+        if (lineaAvisoAlto != null) lineaAvisoAlto.enabled = false;
+        if (lineaRayoAlto != null) lineaRayoAlto.enabled = false;
+        if (lineaRayoAltoNucleo != null) lineaRayoAltoNucleo.enabled = false;
+        if (brilloCarga != null) brilloCarga.SetActive(false);
+        if (anim != null) anim.speed = 1f;
+        if (!cc.enabled && !muerto) cc.enabled = true;
+        aturdido = false;
+    }
+
+    Vector3 PuntoDisparo()
+    {
+        float escala = transform.lossyScale.y;
+        Vector3 respaldo = transform.position + Vector3.up * 1.3f * escala + transform.forward * 0.9f * escala;
+        if (manoDerecha == null) return respaldo;
+
+        // Punta del rifle: un poco por delante de la mano
+        Vector3 p = manoDerecha.position + transform.forward * 0.6f * escala;
+
+        // Seguridad: si el hueso queda en un lugar raro, usar la altura del pecho
+        float alto = cc.height * escala;
+        if (Vector3.Distance(p, transform.position) > alto * 1.5f || p.y < transform.position.y + alto * 0.3f)
+            return respaldo;
+        return p;
+    }
+
+    Vector3 PuntoBajoRayo(Vector3 dir) { return PuntoBajoRayo(dir, alturaRayo); }
+
+    Vector3 PuntoBajoRayo(Vector3 dir, float altura)
+    {
+        Vector3 p = transform.position + dir * 2.5f * transform.lossyScale.x;
+        p.y = AlturaSuelo(transform.position) + altura;
+        return p;
+    }
+
+    Vector3 CentroJugador()
+    {
+        if (jugadorCC != null) return jugadorCC.bounds.center;
+        return jugador.position + Vector3.up;
+    }
+
+    // Direccion para acertarle al jugador, prediciendo su movimiento (prediccion 0..1)
+    Vector3 Apuntar(Vector3 origen, float velocidadBala, float prediccion)
+    {
+        Vector3 objetivo = CentroJugador();
+        float tiempo = Vector3.Distance(origen, objetivo) / velocidadBala;
+        objetivo += new Vector3(jugadorVel.x, jugadorVel.y * 0.3f, jugadorVel.z) * tiempo * prediccion;
+        return (objetivo - origen).normalized;
+    }
+
+    bool JugadorEnRayo(Vector3 a, Vector3 b, float radioRayo)
+    {
+        if (jugadorCC == null) return false;
+        Bounds bj = jugadorCC.bounds;
+        // altura: el rayo esta a la altura de a.y; si los pies del jugador estan por encima, lo esquivo
+        if (bj.min.y > a.y + radioRayo || bj.max.y < a.y - radioRayo) return false;
+        Vector3 c = bj.center;
+        Vector3 ab = Plano(b - a);
+        Vector3 ac = Plano(c - a);
+        float k = ab.sqrMagnitude > 0.0001f ? Mathf.Clamp01(Vector3.Dot(ac, ab) / ab.sqrMagnitude) : 0f;
+        Vector3 cercano = a + (b - a) * k;
+        return Plano(c - cercano).magnitude < radioRayo + jugadorCC.radius;
+    }
+
+    // Distancia hasta la pared mas cercana (ignorando al jefe y al jugador)
+    float DistanciaLibre(Vector3 origen, Vector3 dir, float max)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(origen, dir, max, ~0, QueryTriggerInteraction.Ignore);
+        float mejor = max;
+        foreach (RaycastHit h in hits)
+        {
+            if (h.collider.transform.IsChildOf(transform)) continue;
+            if (jugador != null && h.collider.transform.IsChildOf(jugador)) continue;
+            if (h.collider.GetComponentInParent<BossProjectile>() != null) continue;
+            if (h.distance < mejor) mejor = h.distance;
+        }
+        return mejor;
+    }
+
+    float AlturaSuelo(Vector3 punto)
+    {
+        RaycastHit[] hits = Physics.RaycastAll(punto + Vector3.up * 3f, Vector3.down, 30f, ~0, QueryTriggerInteraction.Ignore);
+        float mejor = float.MinValue;
+        float dist = float.MaxValue;
+        foreach (RaycastHit h in hits)
+        {
+            if (h.collider.transform.IsChildOf(transform)) continue;
+            if (jugador != null && h.collider.transform.IsChildOf(jugador)) continue;
+            if (h.distance < dist) { dist = h.distance; mejor = h.point.y; }
+        }
+        return mejor == float.MinValue ? punto.y : mejor;
+    }
+
+    float DistanciaPlana(Vector3 p) => Plano(p - transform.position).magnitude;
+    static Vector3 Plano(Vector3 v) { v.y = 0f; return v; }
+
+    void Animar(string estado, float transicion = 0.15f)
+    {
+        if (anim == null || estado == estadoAnim) return;
+        int hash = Animator.StringToHash(estado);
+        if (!anim.HasState(0, hash)) return;
+        anim.CrossFadeInFixedTime(hash, transicion);
+        estadoAnim = estado;
+    }
+
+    void AnimarMovimiento(Vector3 vel)
+    {
+        Vector3 local = transform.InverseTransformDirection(vel);
+        if (vel.magnitude < 0.5f) { Animar("ApuntarQuieto"); return; }
+        if (vel.magnitude > velocidadMovimiento * 1.6f) { Animar("Correr"); return; }
+        if (Mathf.Abs(local.x) > Mathf.Abs(local.z)) Animar(local.x > 0f ? "CaminarDer" : "CaminarIzq");
+        else Animar(local.z > 0f ? "CaminarAdelante" : "CaminarAtras");
+    }
+
+    void Destello(Color c, float duracion)
+    {
+        mpb.Clear();
+        mpb.SetColor("_BaseColor", c);
+        mpb.SetColor("_Color", c);
+        foreach (Renderer r in renderers) if (r != null) r.SetPropertyBlock(mpb);
+        destelloHasta = Time.time + duracion;
+    }
+
+    void Sonar(AudioClip clip, float volumen)
+    {
+        if (clip != null) audioSrc.PlayOneShot(clip, volumen);
+    }
+
+    LineRenderer CrearLinea(string nombre, float ancho, Color color)
+    {
+        GameObject go = new GameObject(nombre);
+        LineRenderer lr = go.AddComponent<LineRenderer>();
+        lr.sharedMaterial = BossProjectile.MaterialEfectos();
+        lr.widthMultiplier = ancho;
+        lr.positionCount = 2;
+        lr.useWorldSpace = true;
+        lr.numCapVertices = 4;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lr.receiveShadows = false;
+        ColorLinea(lr, color);
+        lr.enabled = false;
+        return lr;
+    }
+
+    static void ColorLinea(LineRenderer lr, Color c)
+    {
+        lr.startColor = c;
+        lr.endColor = c;
+    }
+
+    static Transform BuscarHijo(Transform raiz, string nombre)
+    {
+        foreach (Transform t in raiz.GetComponentsInChildren<Transform>(true))
+            if (t.name == nombre) return t;
+        return null;
+    }
+}
+
+// Onda que se expande por el suelo; hace dano si el jugador esta en el suelo cuando pasa.
+public class OndaExpansiva : MonoBehaviour
+{
+    LineRenderer lr;
+    float radio = 0.5f, velocidad, radioMax, dano;
+    bool golpeo;
+    PlayerMovement jugador;
+    CharacterController jugadorCC;
+    Color color;
+    const int Segmentos = 64;
+
+    public static void Crear(Vector3 centro, Color color, float dano, PlayerMovement jugador, float velocidad, float radioMax)
+    {
+        GameObject go = new GameObject("OndaJefe");
+        go.transform.position = centro + Vector3.up * 0.15f;
+        OndaExpansiva o = go.AddComponent<OndaExpansiva>();
+        o.color = color; o.dano = dano; o.jugador = jugador; o.velocidad = velocidad; o.radioMax = radioMax;
+        o.jugadorCC = jugador != null ? jugador.GetComponent<CharacterController>() : null;
+        o.lr = go.AddComponent<LineRenderer>();
+        o.lr.sharedMaterial = BossProjectile.MaterialEfectos();
+        o.lr.loop = true;
+        o.lr.useWorldSpace = false;
+        o.lr.positionCount = Segmentos;
+        o.lr.widthMultiplier = 0.6f;
+        o.lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+    }
+
+    void Update()
+    {
+        radio += velocidad * Time.deltaTime;
+        float k = radio / radioMax;
+        for (int i = 0; i < Segmentos; i++)
+        {
+            float a = i * Mathf.PI * 2f / Segmentos;
+            lr.SetPosition(i, new Vector3(Mathf.Cos(a) * radio, 0f, Mathf.Sin(a) * radio));
+        }
+        Color c = color; c.a = 1f - k * 0.8f;
+        lr.startColor = lr.endColor = c;
+
+        if (!golpeo && jugador != null && !jugador.IsDead && jugadorCC != null)
+        {
+            Vector3 p = jugador.transform.position;
+            float d = new Vector2(p.x - transform.position.x, p.z - transform.position.z).magnitude;
+            bool enSuelo = jugadorCC.isGrounded && jugadorCC.bounds.min.y < transform.position.y + 0.9f;
+            if (enSuelo && Mathf.Abs(d - radio) < 1.1f)
+            {
+                golpeo = true;
+                jugador.TakeDamage(dano);
+            }
+        }
+        if (radio >= radioMax) Destroy(gameObject);
+    }
+}
+
+// Onda en forma de esfera que se expande rapido desde un punto; dana una vez al jugador si lo alcanza.
+public class OndaEsfera : MonoBehaviour
+{
+    float radioMax, duracion, dano, t;
+    bool golpeo;
+    PlayerMovement jugador;
+    CharacterController jugadorCC;
+    Renderer rend;
+    Material mat;
+    Color color;
+
+    public static void Crear(Vector3 centro, Color color, float dano, PlayerMovement jugador, float radioMax, float duracion)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        go.name = "OndaChoqueJefe";
+        Object.Destroy(go.GetComponent<Collider>());
+        go.transform.position = centro;
+        go.transform.localScale = Vector3.one * 0.5f;
+        OndaEsfera o = go.AddComponent<OndaEsfera>();
+        o.color = color; o.dano = dano; o.jugador = jugador; o.radioMax = radioMax; o.duracion = Mathf.Max(0.05f, duracion);
+        o.jugadorCC = jugador != null ? jugador.GetComponent<CharacterController>() : null;
+        o.rend = go.GetComponent<Renderer>();
+        o.mat = new Material(BossProjectile.MaterialEfectos());
+        o.rend.sharedMaterial = o.mat;
+        o.rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        o.rend.receiveShadows = false;
+    }
+
+    void Update()
+    {
+        t += Time.deltaTime;
+        float k = Mathf.Clamp01(t / duracion);
+        float radio = Mathf.Lerp(0.25f, radioMax, 1f - (1f - k) * (1f - k));   // rapido al inicio, frena al final
+        transform.localScale = Vector3.one * radio * 2f;
+        Color c = color; c.a = 0.55f * (1f - k);
+        mat.color = c;
+
+        if (!golpeo && jugador != null && !jugador.IsDead)
+        {
+            Vector3 p = jugadorCC != null ? jugadorCC.bounds.center : jugador.transform.position;
+            float alcance = radio + (jugadorCC != null ? jugadorCC.radius : 0.4f);
+            if ((p - transform.position).sqrMagnitude < alcance * alcance)
+            {
+                golpeo = true;
+                jugador.TakeDamage(dano);
+            }
+        }
+        if (k >= 1f) Destroy(gameObject);
+    }
+
+    void OnDestroy() { if (mat != null) Destroy(mat); }
+}

@@ -22,12 +22,16 @@ public class HealingOrb : MonoBehaviour
     private float verticalVelocity = 0f;
     private bool hasLanded = false;
 
+    // Solo el escenario cuenta como suelo (ignora jugador, balas, enemigos y triggers)
+    private int groundMask;
+
 
     private Vector3 startPosition;
 
     void Start()
     {
         startPosition = transform.position;
+        groundMask = ~LayerMask.GetMask("Player", "Bullet", "Enemy", "Ignore Raycast", "Aim Mask", "UI");
     }
 
     void Update()
@@ -38,7 +42,9 @@ public class HealingOrb : MonoBehaviour
                 transform.position,
                 Vector3.down,
                 out RaycastHit hit,
-                raycastDistance))
+                raycastDistance,
+                groundMask,
+                QueryTriggerInteraction.Ignore))
             {
                 float targetY = hit.point.y + groundOffset;
 

@@ -22,6 +22,7 @@ public class RecogerArma : MonoBehaviour
     public string textoAccion = "Recoger fusil";
     public TMP_FontAsset fuente;                  // opcional
 
+
     [Header("Posicion del arma nueva (relativa a la camara)")]
     public bool usarPosicionDeLaPistola = true;   // la coloca donde estaba la pistola
     public Vector3 posicionLocal;                 // se usa si lo de arriba esta desactivado

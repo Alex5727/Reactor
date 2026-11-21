@@ -16,6 +16,12 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
     public AudioClip sonidoDeteccion;
     public float volumenExplosion = 1f;
 
+    [Header("Pasos (en bucle mientras persigue)")]
+    public AudioClip sonidoPasos;
+    [Range(0f, 1f)] public float volumenPasos = 0.6f;
+    public float velocidadPasos = 2f;          // x2 de velocidad
+    private AudioSource fuentePasos;
+
 
     Animator anim;
 
@@ -136,6 +142,38 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
             case State.Chasing: UpdateChasing(dt); break;
             case State.Climbing: UpdateClimbing(dt); break;
         }
+
+        if (!exploded) ActualizarPasos();
+    }
+
+    // =============================================================== PASOS
+
+    // Suena en bucle desde que arranca la persecucion hasta que explota o muere
+    void ActualizarPasos()
+    {
+        if (sonidoPasos == null || state == State.Idle || Time.time < chaseStartTime) return;
+
+        if (fuentePasos == null)
+        {
+            fuentePasos = gameObject.AddComponent<AudioSource>();
+            fuentePasos.clip = sonidoPasos;
+            fuentePasos.loop = true;
+            fuentePasos.playOnAwake = false;
+            fuentePasos.volume = volumenPasos;
+            fuentePasos.pitch = velocidadPasos;
+            fuentePasos.spatialBlend = 1f;                       // 3D: se oye mas fuerte cuanto mas cerca
+            fuentePasos.rolloffMode = AudioRolloffMode.Linear;
+            fuentePasos.minDistance = 2f;
+            fuentePasos.maxDistance = 25f;
+            if (audioSource != null) fuentePasos.outputAudioMixerGroup = audioSource.outputAudioMixerGroup;
+            fuentePasos.time = Random.value * sonidoPasos.length; // evita que varios enemigos suenen sincronizados
+        }
+        if (!fuentePasos.isPlaying) fuentePasos.Play();
+    }
+
+    void DetenerPasos()
+    {
+        if (fuentePasos != null) fuentePasos.Stop();
     }
 
     // =============================================================== INACTIVA
@@ -618,6 +656,7 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
     {
         if (exploded) return;
         exploded = true;
+        DetenerPasos();
 
         AudioSource.PlayClipAtPoint(
           sonidoExplosion,
@@ -674,6 +713,7 @@ public class SpiderEnemy : MonoBehaviour, IDamageable
         Wake();                                   // si lo golpean estando quieto, se activa
         if (health <= 0f)
         {
+            DetenerPasos();
             DropHealingOrb();
             Destroy(gameObject);    // muere sin explotar
 
